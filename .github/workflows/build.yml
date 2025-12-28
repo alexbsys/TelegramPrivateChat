@@ -8,7 +8,7 @@ on:
   workflow_dispatch:  # Allow manual trigger
 
 jobs:
-  build:
+  build-debug:
     runs-on: ubuntu-latest
     
     steps:
@@ -45,17 +45,33 @@ jobs:
         path: TMessagesProj_App/build/outputs/apk/afat/debug/*.apk
         retention-days: 14
 
+  # Release build - only runs if RELEASE_KEYSTORE_BASE64 secret exists
+  # To enable: add RELEASE_KEYSTORE_BASE64, RELEASE_KEY_PASSWORD, RELEASE_KEY_ALIAS, RELEASE_STORE_PASSWORD secrets
   build-release:
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main')
+    # This job will be skipped if secrets are not configured
+    continue-on-error: true
     
     steps:
+    - name: Check if release secrets exist
+      id: check-secrets
+      run: |
+        if [ -z "${{ secrets.RELEASE_KEYSTORE_BASE64 }}" ]; then
+          echo "has_secrets=false" >> $GITHUB_OUTPUT
+          echo "⚠️ Release secrets not configured, skipping release build"
+        else
+          echo "has_secrets=true" >> $GITHUB_OUTPUT
+        fi
+    
     - name: Checkout repository
+      if: steps.check-secrets.outputs.has_secrets == 'true'
       uses: actions/checkout@v4
       with:
         submodules: recursive
     
     - name: Set up JDK 17
+      if: steps.check-secrets.outputs.has_secrets == 'true'
       uses: actions/setup-java@v4
       with:
         java-version: '17'
@@ -63,22 +79,26 @@ jobs:
         cache: gradle
     
     - name: Setup Android SDK
+      if: steps.check-secrets.outputs.has_secrets == 'true'
       uses: android-actions/setup-android@v3
     
     - name: Create api_keys.properties
+      if: steps.check-secrets.outputs.has_secrets == 'true'
       run: |
         echo "TELEGRAM_APP_ID=${{ secrets.TELEGRAM_APP_ID }}" > api_keys.properties
         echo "TELEGRAM_APP_HASH=${{ secrets.TELEGRAM_APP_HASH }}" >> api_keys.properties
     
     - name: Setup Keystore
-      if: ${{ secrets.RELEASE_KEYSTORE_BASE64 != '' }}
+      if: steps.check-secrets.outputs.has_secrets == 'true'
       run: |
         echo "${{ secrets.RELEASE_KEYSTORE_BASE64 }}" | base64 -d > TMessagesProj/config/release.keystore
     
     - name: Grant execute permission for gradlew
+      if: steps.check-secrets.outputs.has_secrets == 'true'
       run: chmod +x gradlew
     
     - name: Build Release APK
+      if: steps.check-secrets.outputs.has_secrets == 'true'
       env:
         RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
         RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
@@ -86,9 +106,9 @@ jobs:
       run: ./gradlew :TMessagesProj_App:assembleAfatRelease
     
     - name: Upload Release APK
+      if: steps.check-secrets.outputs.has_secrets == 'true'
       uses: actions/upload-artifact@v4
       with:
         name: telegram-release-apk
         path: TMessagesProj_App/build/outputs/apk/afat/release/*.apk
         retention-days: 30
-
