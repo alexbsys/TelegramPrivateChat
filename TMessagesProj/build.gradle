@@ -14,6 +14,14 @@ configurations {
 configurations.all {
     exclude group: 'com.google.firebase', module: 'firebase-core'
     exclude group: 'androidx.recyclerview', module: 'recyclerview'
+    
+    // Force Kotlin stdlib version to match the compiler version
+    resolutionStrategy {
+        force "org.jetbrains.kotlin:kotlin-stdlib:1.9.20"
+        force "org.jetbrains.kotlin:kotlin-stdlib-jdk7:1.9.20"
+        force "org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.9.20"
+        force "org.jetbrains.kotlin:kotlin-stdlib-common:1.9.20"
+    }
 }
 
 dependencies {
@@ -107,6 +115,10 @@ android {
         vectorDrawables.generatedDensities = ['mdpi', 'hdpi', 'xhdpi', 'xxhdpi']
 
         multiDexEnabled true
+        
+        // Telegram API keys - read from api_keys.properties or environment
+        buildConfigField "int", "TELEGRAM_APP_ID", getApiKey("TELEGRAM_APP_ID")
+        buildConfigField "String", "TELEGRAM_APP_HASH", "\"" + getApiKey("TELEGRAM_APP_HASH") + "\""
 
         externalNativeBuild {
             cmake {
@@ -223,6 +235,28 @@ def getProps(String propName) {
     } else {
         return "";
     }
+}
+
+// Read API keys from api_keys.properties file
+def getApiKey(String keyName) {
+    def propsFile = rootProject.file('api_keys.properties')
+    if (propsFile.exists()) {
+        def props = new Properties()
+        props.load(new FileInputStream(propsFile))
+        def value = props[keyName]
+        if (value != null && !value.isEmpty()) {
+            return value
+        }
+    }
+    // Fallback to environment variables (for CI/CD)
+    def envValue = System.getenv(keyName)
+    if (envValue != null && !envValue.isEmpty()) {
+        return envValue
+    }
+    // Default values (will not work, but allows build to complete)
+    if (keyName == "TELEGRAM_APP_ID") return "0"
+    if (keyName == "TELEGRAM_APP_HASH") return ""
+    return ""
 }
 apply plugin: 'com.google.gms.google-services'
 

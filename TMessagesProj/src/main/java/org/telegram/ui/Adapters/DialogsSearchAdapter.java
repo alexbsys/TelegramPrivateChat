@@ -836,6 +836,11 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
     }
 
     public void putRecentSearch(final long did, TLObject object) {
+        // Don't add hidden chats to search history
+        if (org.telegram.messenger.HiddenChatsManager.getInstance().isHiddenChat(did)) {
+            return;
+        }
+        
         RecentSearchObject recentSearchObject = recentSearchObjectsById.get(did);
         if (recentSearchObject == null) {
             recentSearchObject = new RecentSearchObject();
@@ -1091,6 +1096,69 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
     }
 
     int waitingResponseCount;
+
+    /**
+     * Show only hidden chats in search results
+     */
+    public void searchDialogsForHiddenChats(java.util.Set<Long> hiddenDialogIds) {
+        if (searchRunnable != null) {
+            Utilities.searchQueue.cancelRunnable(searchRunnable);
+            searchRunnable = null;
+        }
+        if (searchRunnable2 != null) {
+            AndroidUtilities.cancelRunOnUIThread(searchRunnable2);
+            searchRunnable2 = null;
+        }
+        
+        // Clear existing results
+        searchResult.clear();
+        searchResultNames.clear();
+        searchResultMessages.clear();
+        searchForumResultMessages.clear();
+        searchResultHashtags.clear();
+        searchTopics.clear();
+        searchContacts.clear();
+        publicPosts.clear();
+        sponsoredPeers.clear();
+        
+        // Add hidden dialogs to search results
+        MessagesController messagesController = MessagesController.getInstance(currentAccount);
+        for (Long dialogId : hiddenDialogIds) {
+            if (DialogObject.isEncryptedDialog(dialogId)) {
+                // Secret/encrypted chat
+                int encryptedChatId = DialogObject.getEncryptedChatId(dialogId);
+                TLRPC.EncryptedChat encryptedChat = messagesController.getEncryptedChat(encryptedChatId);
+                if (encryptedChat != null) {
+                    TLRPC.User user = messagesController.getUser(encryptedChat.user_id);
+                    if (user != null) {
+                        searchResult.add(encryptedChat);
+                        String name = "🔒 " + ContactsController.formatName(user.first_name, user.last_name);
+                        searchResultNames.add(name);
+                    }
+                }
+            } else if (DialogObject.isUserDialog(dialogId)) {
+                TLRPC.User user = messagesController.getUser(dialogId);
+                if (user != null) {
+                    searchResult.add(user);
+                    String name = ContactsController.formatName(user.first_name, user.last_name);
+                    searchResultNames.add(name);
+                }
+            } else if (DialogObject.isChatDialog(dialogId)) {
+                TLRPC.Chat chat = messagesController.getChat(-dialogId);
+                if (chat != null) {
+                    searchResult.add(chat);
+                    searchResultNames.add(chat.title);
+                }
+            }
+        }
+        
+        searchWas = true;
+        lastSearchText = "__HIDDEN_CHATS__";
+        if (delegate != null) {
+            delegate.searchStateChanged(false, true);
+        }
+        notifyDataSetChanged();
+    }
 
     public void searchDialogs(String text, int folderId, boolean allowPublicPosts) {
         if (text != null && text.equals(lastSearchText) && (folderId == this.folderId || TextUtils.isEmpty(text))) {
@@ -2330,14 +2398,20 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
     public void filterRecent(String query) {
         filteredRecentQuery = query;
         filtered2RecentSearchObjects.clear();
+        org.telegram.messenger.HiddenChatsManager hiddenManager = org.telegram.messenger.HiddenChatsManager.getInstance();
         if (TextUtils.isEmpty(query)) {
             filteredRecentSearchObjects.clear();
             final int count = recentSearchObjects.size();
             for (int i = 0; i < count; ++i) {
-                if (delegate != null && delegate.getSearchForumDialogId() == recentSearchObjects.get(i).did || !filter(recentSearchObjects.get(i).object)) {
+                RecentSearchObject obj = recentSearchObjects.get(i);
+                // Skip hidden chats in search history
+                if (hiddenManager.isHiddenChat(obj.did)) {
                     continue;
                 }
-                filteredRecentSearchObjects.add(recentSearchObjects.get(i));
+                if (delegate != null && delegate.getSearchForumDialogId() == obj.did || !filter(obj.object)) {
+                    continue;
+                }
+                filteredRecentSearchObjects.add(obj);
             }
             return;
         }
@@ -2346,6 +2420,10 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
         for (int i = 0; i < count; ++i) {
             RecentSearchObject obj = recentSearchObjects.get(i);
             if (obj == null || obj.object == null) {
+                continue;
+            }
+            // Skip hidden chats in search history
+            if (hiddenManager.isHiddenChat(obj.did)) {
                 continue;
             }
             if (delegate != null && delegate.getSearchForumDialogId() == obj.did || !filter(recentSearchObjects.get(i).object)) {

@@ -4992,7 +4992,18 @@ public class Theme {
             throw new RuntimeException(e);
         }
         if (applyingTheme == null) {
-            applyingTheme = defaultTheme;
+            // Use custom default theme for our fork if specified
+            if (org.telegram.messenger.BuildVars.DEFAULT_THEME != null) {
+                ThemeInfo customDefault = themesDict.get(org.telegram.messenger.BuildVars.DEFAULT_THEME);
+                if (customDefault != null) {
+                    applyingTheme = customDefault;
+                    currentDayTheme = customDefault;
+                } else {
+                    applyingTheme = defaultTheme;
+                }
+            } else {
+                applyingTheme = defaultTheme;
+            }
         } else {
             currentDayTheme = applyingTheme;
         }

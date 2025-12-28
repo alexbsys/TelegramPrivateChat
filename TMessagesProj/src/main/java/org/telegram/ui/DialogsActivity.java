@@ -108,6 +108,7 @@ import org.telegram.messenger.Emoji;
 import org.telegram.messenger.FileLoader;
 import org.telegram.messenger.FileLog;
 import org.telegram.messenger.FilesMigrationService;
+import org.telegram.messenger.HiddenChatsManager;
 import org.telegram.messenger.GiftAuctionController;
 import org.telegram.messenger.ImageLoader;
 import org.telegram.messenger.ImageLocation;
@@ -6773,6 +6774,8 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
             searchIsShowed = false;
             updateFilterTabs(true, true);
         }
+        // Always exit hidden chats mode when closing search
+        HiddenChatsManager.getInstance().exitHiddenChatsMode();
     }
 
     public void scrollToFolder(int fid) {
@@ -10202,6 +10205,9 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
     }
 
     private void closeSearch() {
+        // Always exit hidden chats mode when closing search
+        HiddenChatsManager.getInstance().exitHiddenChatsMode();
+        
         if (AndroidUtilities.isTablet()) {
             if (actionBar != null) {
                 actionBar.closeSearchField();
@@ -11185,7 +11191,19 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
         }
         MessagesController messagesController = AccountInstance.getInstance(currentAccount).getMessagesController();
         if (dialogsType == DIALOGS_TYPE_DEFAULT) {
-            return messagesController.getDialogs(folderId);
+            ArrayList<TLRPC.Dialog> dialogs = messagesController.getDialogs(folderId);
+            // ALWAYS filter out hidden chats from main list - they are only accessible via search with password
+            HiddenChatsManager hiddenManager = HiddenChatsManager.getInstance();
+            if (hiddenManager.hasHiddenChats()) {
+                ArrayList<TLRPC.Dialog> filtered = new ArrayList<>();
+                for (TLRPC.Dialog dialog : dialogs) {
+                    if (!hiddenManager.isHiddenChat(dialog.id)) {
+                        filtered.add(dialog);
+                    }
+                }
+                return filtered;
+            }
+            return dialogs;
         } else if (dialogsType == DIALOGS_TYPE_WIDGET || dialogsType == DIALOGS_TYPE_IMPORT_HISTORY) {
             return messagesController.dialogsServerOnly;
         } else if (dialogsType == DIALOGS_TYPE_ADD_USERS_TO) {
@@ -11215,7 +11233,19 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
             }
             return dialogs;
         } else if (dialogsType == DIALOGS_TYPE_FORWARD) {
-            return messagesController.dialogsForward;
+            ArrayList<TLRPC.Dialog> dialogs = messagesController.dialogsForward;
+            // Filter out hidden chats from forward/share list
+            HiddenChatsManager hiddenManager = HiddenChatsManager.getInstance();
+            if (hiddenManager.hasHiddenChats()) {
+                ArrayList<TLRPC.Dialog> filtered = new ArrayList<>();
+                for (TLRPC.Dialog dialog : dialogs) {
+                    if (!hiddenManager.isHiddenChat(dialog.id)) {
+                        filtered.add(dialog);
+                    }
+                }
+                return filtered;
+            }
+            return dialogs;
         } else if (dialogsType == DIALOGS_TYPE_USERS_ONLY || dialogsType == DIALOGS_TYPE_IMPORT_HISTORY_USERS) {
             return messagesController.dialogsUsersOnly;
         } else if (dialogsType == DIALOGS_TYPE_CHANNELS_ONLY) {
@@ -11227,10 +11257,24 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
             if (dialogFilter == null) {
                 return messagesController.getDialogs(folderId);
             } else {
+                ArrayList<TLRPC.Dialog> dialogs;
                 if (initialDialogsType == DIALOGS_TYPE_FORWARD) {
-                    return dialogFilter.dialogsForward;
+                    dialogs = dialogFilter.dialogsForward;
+                } else {
+                    dialogs = dialogFilter.dialogs;
                 }
-                return dialogFilter.dialogs;
+                // Filter out hidden chats
+                HiddenChatsManager hiddenManager = HiddenChatsManager.getInstance();
+                if (hiddenManager.hasHiddenChats()) {
+                    ArrayList<TLRPC.Dialog> filtered = new ArrayList<>();
+                    for (TLRPC.Dialog dialog : dialogs) {
+                        if (!hiddenManager.isHiddenChat(dialog.id)) {
+                            filtered.add(dialog);
+                        }
+                    }
+                    return filtered;
+                }
+                return dialogs;
             }
         } else if (dialogsType == DIALOGS_TYPE_BLOCK) {
             return messagesController.dialogsForBlock;
@@ -11270,6 +11314,11 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
                         botShareDialogs.add(d);
                     }
                 }
+            }
+            // Filter out hidden chats from bot share list
+            HiddenChatsManager hiddenManager = HiddenChatsManager.getInstance();
+            if (hiddenManager.hasHiddenChats()) {
+                botShareDialogs.removeIf(d -> hiddenManager.isHiddenChat(d.id));
             }
             getMessagesController().sortDialogsList(botShareDialogs);
             return botShareDialogs;
