@@ -1,6 +1,9 @@
 /*
  * Hidden Chats Activity for Telegram-Xalexb
  * Manages hidden chats: add, remove, change password
+ * 
+ * In decoy mode, this screen behaves as if it's the real screen,
+ * but actually operates on the decoy list.
  */
 
 package org.telegram.ui;
@@ -66,6 +69,7 @@ public class HiddenChatsActivity extends BaseFragment {
     private void updateRows() {
         rowCount = 0;
         hiddenChatsList.clear();
+        // getHiddenDialogIds() returns current mode list (main or decoy)
         hiddenChatsList.addAll(HiddenChatsManager.getInstance().getHiddenDialogIds());
 
         hideChatsRow = rowCount++;
@@ -153,18 +157,19 @@ public class HiddenChatsActivity extends BaseFragment {
         args.putBoolean("canSelectTopics", false);
         args.putInt("dialogsType", DialogsActivity.DIALOGS_TYPE_FORWARD);
         args.putString("selectAlertString", LocaleController.getString("SelectChatToHide", R.string.SelectChatToHide));
+        // Pass flag to hide main hidden chats in decoy mode
+        args.putBoolean("hideMainHiddenChats", HiddenChatsManager.getInstance().isDecoyMode());
         
         DialogsActivity dialogsActivity = new DialogsActivity(args);
         dialogsActivity.setDelegate((fragment, dids, message, param, notify, scheduleDate, topicsFragment) -> {
             if (dids != null && !dids.isEmpty()) {
-                // Get the selected dialog id
                 long dialogId = dids.get(0).dialogId;
                 
                 // Close the dialogs picker first
                 fragment.finishFragment();
                 
-                // Check if already hidden
-                if (HiddenChatsManager.getInstance().isHiddenChat(dialogId)) {
+                // Check if already hidden in current mode
+                if (HiddenChatsManager.getInstance().isHiddenInCurrentMode(dialogId)) {
                     AlertDialog.Builder builder = new AlertDialog.Builder(getParentActivity());
                     builder.setTitle(LocaleController.getString("AlreadyHidden", R.string.AlreadyHidden));
                     builder.setMessage(LocaleController.getString("ChatAlreadyHidden", R.string.ChatAlreadyHidden));
@@ -173,7 +178,7 @@ public class HiddenChatsActivity extends BaseFragment {
                     return true;
                 }
                 
-                // Add to hidden chats
+                // Add to hidden chats (adds to current mode's list)
                 HiddenChatsManager.getInstance().addHiddenChat(dialogId);
                 updateRows();
                 if (listAdapter != null) {
@@ -232,7 +237,6 @@ public class HiddenChatsActivity extends BaseFragment {
 
     private String getDialogName(long dialogId) {
         if (DialogObject.isEncryptedDialog(dialogId)) {
-            // Secret chat
             int encryptedChatId = DialogObject.getEncryptedChatId(dialogId);
             TLRPC.EncryptedChat encryptedChat = getMessagesController().getEncryptedChat(encryptedChatId);
             if (encryptedChat != null) {
@@ -264,6 +268,8 @@ public class HiddenChatsActivity extends BaseFragment {
         Context context = getParentActivity();
         if (context == null) return;
 
+        HiddenChatsManager manager = HiddenChatsManager.getInstance();
+        
         AlertDialog.Builder builder = new AlertDialog.Builder(context);
         builder.setTitle(LocaleController.getString("ChangePassword", R.string.ChangePassword));
 
@@ -314,7 +320,15 @@ public class HiddenChatsActivity extends BaseFragment {
             String newPass = newPasswordField.getText().toString();
             String confirmPass = confirmPasswordField.getText().toString();
 
-            if (!HiddenChatsManager.getInstance().checkPassword(oldPass)) {
+            // In decoy mode, check decoy password; in normal mode, check main password
+            boolean passwordCorrect;
+            if (manager.isDecoyMode()) {
+                passwordCorrect = manager.checkDecoyPassword(oldPass);
+            } else {
+                passwordCorrect = manager.checkMainPassword(oldPass);
+            }
+            
+            if (!passwordCorrect) {
                 AlertDialog.Builder errorBuilder = new AlertDialog.Builder(context);
                 errorBuilder.setTitle(LocaleController.getString("Error", R.string.Error));
                 errorBuilder.setMessage(LocaleController.getString("CurrentPasswordIncorrect", R.string.CurrentPasswordIncorrect));
@@ -340,8 +354,27 @@ public class HiddenChatsActivity extends BaseFragment {
                 showDialog(errorBuilder.create());
                 return;
             }
+            
+            // Check that new password doesn't match the other password
+            if (!manager.isDecoyMode() && manager.isPasswordSameAsDecoy(newPass)) {
+                AlertDialog.Builder errorBuilder = new AlertDialog.Builder(context);
+                errorBuilder.setTitle(LocaleController.getString("Error", R.string.Error));
+                errorBuilder.setMessage(LocaleController.getString("SecurityPasswordMustBeDifferent", R.string.SecurityPasswordMustBeDifferent));
+                errorBuilder.setPositiveButton(LocaleController.getString("OK", R.string.OK), null);
+                showDialog(errorBuilder.create());
+                return;
+            }
+            if (manager.isDecoyMode() && manager.isPasswordSameAsMain(newPass)) {
+                AlertDialog.Builder errorBuilder = new AlertDialog.Builder(context);
+                errorBuilder.setTitle(LocaleController.getString("Error", R.string.Error));
+                errorBuilder.setMessage(LocaleController.getString("SecurityPasswordMustBeDifferent", R.string.SecurityPasswordMustBeDifferent));
+                errorBuilder.setPositiveButton(LocaleController.getString("OK", R.string.OK), null);
+                showDialog(errorBuilder.create());
+                return;
+            }
 
-            HiddenChatsManager.getInstance().changePassword(newPass);
+            // changePassword will change the appropriate password based on mode
+            manager.changePassword(newPass);
             
             AlertDialog.Builder successBuilder = new AlertDialog.Builder(context);
             successBuilder.setTitle(LocaleController.getString("Success", R.string.Success));
@@ -359,13 +392,16 @@ public class HiddenChatsActivity extends BaseFragment {
         if (context == null) return;
         
         HiddenChatsManager manager = HiddenChatsManager.getInstance();
+        
+        // In decoy mode - hasDecoyPassword() always returns false
+        // So we always show "not set" dialog and pretend to set it
         boolean hasDecoy = manager.hasDecoyPassword();
 
         AlertDialog.Builder builder = new AlertDialog.Builder(context);
         builder.setTitle(LocaleController.getString("SecurityPasswordTitle", R.string.SecurityPasswordTitle));
         
         if (hasDecoy) {
-            // Already has decoy password - offer to change or remove
+            // Has decoy password (only visible in normal mode)
             builder.setMessage(LocaleController.getString("SecurityPasswordIsSet", R.string.SecurityPasswordIsSet));
             
             builder.setPositiveButton(LocaleController.getString("Change", R.string.Change), (dialog, which) -> {
@@ -384,7 +420,7 @@ public class HiddenChatsActivity extends BaseFragment {
             });
             builder.setNegativeButton(LocaleController.getString("Cancel", R.string.Cancel), null);
         } else {
-            // No decoy password yet
+            // No decoy password (or in decoy mode - always shows this)
             builder.setMessage(LocaleController.getString("SecurityPasswordNotSetMessage", R.string.SecurityPasswordNotSetMessage));
             
             builder.setPositiveButton(LocaleController.getString("SetPassword", R.string.SetPassword), (dialog, which) -> {
@@ -400,6 +436,8 @@ public class HiddenChatsActivity extends BaseFragment {
         Context context = getParentActivity();
         if (context == null) return;
 
+        HiddenChatsManager manager = HiddenChatsManager.getInstance();
+        
         AlertDialog.Builder builder = new AlertDialog.Builder(context);
         builder.setTitle(LocaleController.getString("SetSecurityPassword", R.string.SetSecurityPassword));
 
@@ -455,17 +493,21 @@ public class HiddenChatsActivity extends BaseFragment {
                 return;
             }
             
-            // Check that decoy password is different from real password
-            if (HiddenChatsManager.getInstance().checkPassword(pass)) {
-                AlertDialog.Builder errorBuilder = new AlertDialog.Builder(context);
-                errorBuilder.setTitle(LocaleController.getString("Error", R.string.Error));
-                errorBuilder.setMessage(LocaleController.getString("SecurityPasswordMustBeDifferent", R.string.SecurityPasswordMustBeDifferent));
-                errorBuilder.setPositiveButton(LocaleController.getString("OK", R.string.OK), null);
-                showDialog(errorBuilder.create());
-                return;
+            // In decoy mode - pretend we're setting it but do nothing
+            // setDecoyPassword handles this internally
+            if (!manager.isDecoyMode()) {
+                // Only in normal mode - check that password is different from main
+                if (manager.isPasswordSameAsMain(pass)) {
+                    AlertDialog.Builder errorBuilder = new AlertDialog.Builder(context);
+                    errorBuilder.setTitle(LocaleController.getString("Error", R.string.Error));
+                    errorBuilder.setMessage(LocaleController.getString("SecurityPasswordMustBeDifferent", R.string.SecurityPasswordMustBeDifferent));
+                    errorBuilder.setPositiveButton(LocaleController.getString("OK", R.string.OK), null);
+                    showDialog(errorBuilder.create());
+                    return;
+                }
             }
 
-            HiddenChatsManager.getInstance().setDecoyPassword(pass);
+            manager.setDecoyPassword(pass);
             if (listAdapter != null) {
                 listAdapter.notifyDataSetChanged();
             }
@@ -496,7 +538,7 @@ public class HiddenChatsActivity extends BaseFragment {
         @Override
         public boolean isEnabled(RecyclerView.ViewHolder holder) {
             int type = holder.getItemViewType();
-            return type == 0 || type == 3; // TextCell menu items and hidden chats list
+            return type == 0 || type == 3;
         }
 
         @Override
@@ -535,6 +577,7 @@ public class HiddenChatsActivity extends BaseFragment {
                     } else if (position == changePasswordRow) {
                         textCell.setTextAndIcon(LocaleController.getString("ChangePassword", R.string.ChangePassword), R.drawable.msg_permissions, true);
                     } else if (position == decoyPasswordRow) {
+                        // In decoy mode, hasDecoyPassword() always returns false
                         String status = HiddenChatsManager.getInstance().hasDecoyPassword() 
                             ? " (" + LocaleController.getString("SecurityPasswordSet", R.string.SecurityPasswordSet) + ")" 
                             : " (" + LocaleController.getString("SecurityPasswordNotSet", R.string.SecurityPasswordNotSet) + ")";
@@ -571,7 +614,6 @@ public class HiddenChatsActivity extends BaseFragment {
                         long dialogId = hiddenChatsList.get(index);
                         String name = getDialogName(dialogId);
                         
-                        // Choose icon based on dialog type
                         int iconRes;
                         if (DialogObject.isEncryptedDialog(dialogId)) {
                             iconRes = R.drawable.msg_secret;
