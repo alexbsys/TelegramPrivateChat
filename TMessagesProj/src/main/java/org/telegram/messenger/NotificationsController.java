@@ -1762,6 +1762,16 @@ public class NotificationsController extends BaseController {
             return LocaleController.getString(R.string.NotificationHiddenMessage);
         }
         long dialogId = messageObject.messageOwner.dialog_id;
+        // Check if this is a hidden chat - show generic message
+        if (HiddenChatsManager.getInstance().isHiddenChat(dialogId)) {
+            if (preview != null) {
+                preview[0] = false;
+            }
+            if (userName != null) {
+                userName[0] = null;
+            }
+            return "New message received";
+        }
         long chat_id = messageObject.messageOwner.peer_id.chat_id != 0 ? messageObject.messageOwner.peer_id.chat_id : messageObject.messageOwner.peer_id.channel_id;
         long fromId = messageObject.messageOwner.peer_id.user_id;
         if (preview != null) {
@@ -2444,10 +2454,17 @@ public class NotificationsController extends BaseController {
         if (AndroidUtilities.needShowPasscode() || SharedConfig.isWaitingForPasscodeEnter) {
             return LocaleController.getString(R.string.YouHaveNewMessage);
         }
+        // Check if this is a hidden chat - show generic message
+        long dialogId = messageObject.messageOwner.dialog_id;
+        if (HiddenChatsManager.getInstance().isHiddenChat(dialogId)) {
+            if (preview != null) {
+                preview[0] = false;
+            }
+            return "New message received";
+        }
         if (messageObject.isStoryPush || messageObject.isStoryMentionPush) {
             return "!" + messageObject.messageOwner.message;
         }
-        long dialogId = messageObject.messageOwner.dialog_id;
         long chatId = messageObject.messageOwner.peer_id.chat_id != 0 ? messageObject.messageOwner.peer_id.chat_id : messageObject.messageOwner.peer_id.channel_id;
         long fromId = messageObject.messageOwner.peer_id.user_id;
         if (preview != null) {

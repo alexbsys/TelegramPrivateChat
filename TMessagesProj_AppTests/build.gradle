@@ -13,6 +13,14 @@ configurations {
 configurations.all {
     exclude group: 'com.google.firebase', module: 'firebase-core'
     exclude group: 'androidx.recyclerview', module: 'recyclerview'
+    
+    // Force Kotlin stdlib version to match the compiler version
+    resolutionStrategy {
+        force "org.jetbrains.kotlin:kotlin-stdlib:1.9.20"
+        force "org.jetbrains.kotlin:kotlin-stdlib-jdk7:1.9.20"
+        force "org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.9.20"
+        force "org.jetbrains.kotlin:kotlin-stdlib-common:1.9.20"
+    }
 }
 
 dependencies {

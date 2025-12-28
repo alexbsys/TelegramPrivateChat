@@ -115,6 +115,7 @@ import org.telegram.messenger.FileLog;
 import org.telegram.messenger.FingerprintController;
 import org.telegram.messenger.FlagSecureReason;
 import org.telegram.messenger.GenericProvider;
+import org.telegram.messenger.HiddenChatsManager;
 import org.telegram.messenger.GiftAuctionController;
 import org.telegram.messenger.LiteMode;
 import org.telegram.messenger.LocaleController;
@@ -723,6 +724,10 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
                     args.putLong("dialog_id", UserConfig.getInstance(currentAccount).getClientUserId());
                     args.putInt("type", MediaActivity.TYPE_STORIES);
                     presentFragment(new MediaActivity(args, null));
+                } else if (id == 18) {
+                    // Hidden Chats Password
+                    drawerLayoutContainer.closeDrawer(true);
+                    openHiddenChatsWithPassword();
                 }
             }
         });
@@ -1477,6 +1482,113 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
         ProfileActivity fragment = new ProfileActivity(args);
         presentFragment(fragment);
         drawerLayoutContainer.closeDrawer(false);
+    }
+
+    private void openHiddenChatsWithPassword() {
+        HiddenChatsManager manager = HiddenChatsManager.getInstance();
+        
+        if (!manager.hasPassword()) {
+            // First time setup - ask for new password
+            showSetupHiddenChatsPasswordDialog();
+        } else {
+            // Ask for password to access hidden chats menu
+            showEnterHiddenChatsPasswordDialog();
+        }
+    }
+
+    private void showSetupHiddenChatsPasswordDialog() {
+        Context context = this;
+        AlertDialog.Builder builder = new AlertDialog.Builder(context);
+        builder.setTitle(LocaleController.getString("SetupHiddenChatsPassword", R.string.SetupHiddenChatsPassword));
+
+        android.widget.LinearLayout layout = new android.widget.LinearLayout(context);
+        layout.setOrientation(android.widget.LinearLayout.VERTICAL);
+        layout.setPadding(AndroidUtilities.dp(24), AndroidUtilities.dp(8), AndroidUtilities.dp(24), 0);
+
+        final org.telegram.ui.Components.EditTextBoldCursor passwordField = new org.telegram.ui.Components.EditTextBoldCursor(context);
+        passwordField.setTextSize(android.util.TypedValue.COMPLEX_UNIT_DIP, 16);
+        passwordField.setHintTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteHintText));
+        passwordField.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText));
+        passwordField.setBackgroundDrawable(Theme.createEditTextDrawable(context, false));
+        passwordField.setMaxLines(1);
+        passwordField.setLines(1);
+        passwordField.setSingleLine(true);
+        passwordField.setInputType(android.text.InputType.TYPE_CLASS_TEXT | android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD);
+        passwordField.setHint(LocaleController.getString("Password", R.string.Password));
+        layout.addView(passwordField, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, 48));
+
+        final org.telegram.ui.Components.EditTextBoldCursor confirmField = new org.telegram.ui.Components.EditTextBoldCursor(context);
+        confirmField.setTextSize(android.util.TypedValue.COMPLEX_UNIT_DIP, 16);
+        confirmField.setHintTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteHintText));
+        confirmField.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText));
+        confirmField.setBackgroundDrawable(Theme.createEditTextDrawable(context, false));
+        confirmField.setMaxLines(1);
+        confirmField.setLines(1);
+        confirmField.setSingleLine(true);
+        confirmField.setInputType(android.text.InputType.TYPE_CLASS_TEXT | android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD);
+        confirmField.setHint(LocaleController.getString("ConfirmPassword", R.string.ConfirmPassword));
+        layout.addView(confirmField, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, 48, 0, 8, 0, 0));
+
+        builder.setView(layout);
+
+        builder.setPositiveButton(LocaleController.getString("Set", R.string.Set), (dialog, which) -> {
+            String pass = passwordField.getText().toString();
+            String confirm = confirmField.getText().toString();
+
+            if (android.text.TextUtils.isEmpty(pass)) {
+                android.widget.Toast.makeText(context, LocaleController.getString("PasswordCannotBeEmpty", R.string.PasswordCannotBeEmpty), android.widget.Toast.LENGTH_SHORT).show();
+                return;
+            }
+
+            if (!pass.equals(confirm)) {
+                android.widget.Toast.makeText(context, LocaleController.getString("PasswordsDoNotMatch", R.string.PasswordsDoNotMatch), android.widget.Toast.LENGTH_SHORT).show();
+                return;
+            }
+
+            HiddenChatsManager.getInstance().setPassword(pass);
+            presentFragment(new HiddenChatsActivity());
+        });
+
+        builder.setNegativeButton(LocaleController.getString("Cancel", R.string.Cancel), null);
+        builder.show();
+    }
+
+    private void showEnterHiddenChatsPasswordDialog() {
+        Context context = this;
+        AlertDialog.Builder builder = new AlertDialog.Builder(context);
+        builder.setTitle(LocaleController.getString("EnterHiddenChatsPassword", R.string.EnterHiddenChatsPassword));
+
+        android.widget.LinearLayout layout = new android.widget.LinearLayout(context);
+        layout.setOrientation(android.widget.LinearLayout.VERTICAL);
+        layout.setPadding(AndroidUtilities.dp(24), AndroidUtilities.dp(8), AndroidUtilities.dp(24), 0);
+
+        final org.telegram.ui.Components.EditTextBoldCursor passwordField = new org.telegram.ui.Components.EditTextBoldCursor(context);
+        passwordField.setTextSize(android.util.TypedValue.COMPLEX_UNIT_DIP, 16);
+        passwordField.setHintTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteHintText));
+        passwordField.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText));
+        passwordField.setBackgroundDrawable(Theme.createEditTextDrawable(context, false));
+        passwordField.setMaxLines(1);
+        passwordField.setLines(1);
+        passwordField.setSingleLine(true);
+        passwordField.setInputType(android.text.InputType.TYPE_CLASS_TEXT | android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD);
+        passwordField.setHint(LocaleController.getString("Password", R.string.Password));
+        layout.addView(passwordField, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, 48));
+
+        builder.setView(layout);
+
+        builder.setPositiveButton(LocaleController.getString("Enter", R.string.Enter), (dialog, which) -> {
+            String pass = passwordField.getText().toString();
+
+            // Check both real and decoy passwords
+            if (HiddenChatsManager.getInstance().checkPasswordWithDecoy(pass)) {
+                presentFragment(new HiddenChatsActivity());
+            } else {
+                android.widget.Toast.makeText(context, LocaleController.getString("IncorrectPassword", R.string.IncorrectPassword), android.widget.Toast.LENGTH_SHORT).show();
+            }
+        });
+
+        builder.setNegativeButton(LocaleController.getString("Cancel", R.string.Cancel), null);
+        builder.show();
     }
 
     private void checkSystemBarColors() {
@@ -3317,7 +3429,11 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
                 NotificationCenter.getInstance(intentAccount[0]).postNotificationName(NotificationCenter.closeChats);
                 openStories(push_story_dids, true);
             } else if (push_user_id != 0) {
-                if (audioCallUser || videoCallUser) {
+                // Block opening hidden chats from push notification - just show main screen
+                if (HiddenChatsManager.getInstance().isHiddenChat(push_user_id)) {
+                    // Do nothing - user sees main dialogs list
+                    showDialogsList = true;
+                } else if (audioCallUser || videoCallUser) {
                     if (needCallAlert) {
                         final BaseFragment lastFragment = actionBarLayout.getLastFragment();
                         if (lastFragment != null) {
@@ -3342,6 +3458,10 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
                     }
                 }
             } else if (push_chat_id != 0) {
+                // Block opening hidden chats from push notification - just show main screen
+                if (HiddenChatsManager.getInstance().isHiddenChat(-push_chat_id)) {
+                    // Do nothing - user sees main dialogs list
+                } else {
                 Bundle args = new Bundle();
                 args.putLong("chat_id", push_chat_id);
                 if (push_msg_id != 0) {
@@ -3376,14 +3496,21 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
                         drawerLayoutContainer.closeDrawer();
                     }
                 }
+                }
             } else if (push_enc_id != 0) {
-                Bundle args = new Bundle();
-                args.putInt("enc_id", push_enc_id);
-                ChatActivity fragment = new ChatActivity(args);
-                if (getActionBarLayout().presentFragment(new INavigationLayout.NavigationParams(fragment).setNoAnimation(true))) {
-                    pushOpened = true;
-                    LaunchActivity.dismissAllWeb();
-                    drawerLayoutContainer.closeDrawer();
+                // Block opening hidden encrypted chats from push notification
+                long encDialogId = DialogObject.makeEncryptedDialogId(push_enc_id);
+                if (HiddenChatsManager.getInstance().isHiddenChat(encDialogId)) {
+                    // Do nothing - user sees main dialogs list
+                } else {
+                    Bundle args = new Bundle();
+                    args.putInt("enc_id", push_enc_id);
+                    ChatActivity fragment = new ChatActivity(args);
+                    if (getActionBarLayout().presentFragment(new INavigationLayout.NavigationParams(fragment).setNoAnimation(true))) {
+                        pushOpened = true;
+                        LaunchActivity.dismissAllWeb();
+                        drawerLayoutContainer.closeDrawer();
+                    }
                 }
             } else if (showDialogsList) {
                 if (!AndroidUtilities.isTablet()) {
@@ -6944,6 +7071,22 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
         pipActivityHandler.onPause();
         NotificationCenter.getGlobalInstance().postNotificationName(NotificationCenter.stopAllHeavyOperations, 4096);
         ApplicationLoader.mainInterfacePaused = true;
+        
+        // Exit hidden chats mode and close hidden chat when app is paused
+        HiddenChatsManager hiddenManager = HiddenChatsManager.getInstance();
+        if (hiddenManager.isHiddenChatsMode()) {
+            hiddenManager.exitHiddenChatsMode();
+            // Close current fragment if it's a hidden chat
+            BaseFragment currentFragment = getLastFragment();
+            if (currentFragment instanceof ChatActivity) {
+                ChatActivity chatActivity = (ChatActivity) currentFragment;
+                long dialogId = chatActivity.getDialogId();
+                if (hiddenManager.isHiddenChat(dialogId)) {
+                    // Go back to dialogs list
+                    chatActivity.finishFragment();
+                }
+            }
+        }
         int account = currentAccount;
         Utilities.stageQueue.postRunnable(() -> {
             ApplicationLoader.mainInterfacePausedStageQueue = true;

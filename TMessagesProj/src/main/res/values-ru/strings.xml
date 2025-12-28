@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="AppName">Telegram</string>
-    <string name="AppNameBeta">Telegram Beta</string>
+    <string name="AppName">TelegramPrivateChat</string>
+    <string name="AppNameBeta">TelegramPrivateChat Beta</string>
     <string name="LanguageName">Русский</string>
     <string name="English">Английский</string>
     <string name="LanguageNameInEnglish">Russian</string>
@@ -263,4 +263,52 @@
     <string name="RemindTodayAt">\'Отправить сегодня в\' HH:mm</string>
     <string name="RemindDayAt">\'Отправить\' d MMM \'в\' HH:mm</string>
     <string name="RemindDayYearAt">\'Напомнить\' d MMM yyyy \'в\' HH:mm</string>
+
+    <!-- Advanced Safety Control (Hidden Chats) -->
+    <string name="AdvancedSafetyControl">Дополнительная безопасность</string>
+    <string name="HiddenChats">Скрытые чаты</string>
+    <string name="SetupHiddenChatsPassword">Установка пароля скрытых чатов</string>
+    <string name="EnterHiddenChatsPassword">Введите пароль скрытых чатов</string>
+    <string name="HideChat">Скрыть чат</string>
+    <string name="UnhideChat">Показать чат</string>
+    <string name="SecurityPassword">Защитный пароль</string>
+    <string name="SecurityPasswordSet">установлен</string>
+    <string name="SecurityPasswordNotSet">не установлен</string>
+    <string name="CurrentPassword">Текущий пароль</string>
+    <string name="ConfirmNewPassword">Подтвердите новый пароль</string>
+    <string name="ConfirmPassword">Подтвердите пароль</string>
+    <string name="Password">Пароль</string>
+    <string name="PasswordCannotBeEmpty">Пароль не может быть пустым</string>
+    <string name="PasswordsDoNotMatch">Пароли не совпадают</string>
+    <string name="CurrentPasswordIncorrect">Текущий пароль неверен</string>
+    <string name="IncorrectPassword">Неверный пароль</string>
+    <string name="PasswordChangedSuccessfully">Пароль успешно изменён</string>
+    <string name="Success">Успех</string>
+    <string name="Error">Ошибка</string>
+    <string name="AlreadyHidden">Уже скрыт</string>
+    <string name="ChatAlreadyHidden">Этот чат уже скрыт.</string>
+    <string name="ChatHidden">Чат скрыт</string>
+    <string name="ChatHiddenMessage">\"%s\" скрыт. Введите пароль в поле поиска, чтобы увидеть скрытые чаты.</string>
+    <string name="NoHiddenChats">Нет скрытых чатов</string>
+    <string name="NoHiddenChatsMessage">У вас нет скрытых чатов.</string>
+    <string name="SelectChatToUnhide">Выберите чат для показа</string>
+    <string name="SelectChatToHide">Выберите чат для скрытия</string>
+    <string name="UnhideThisChat">Хотите показать этот чат?</string>
+    <string name="Unhide">Показать</string>
+    <string name="HiddenChatsCount">Скрытые чаты (%d)</string>
+    <string name="NoHiddenChatsYet">Скрытых чатов пока нет. Используйте «Скрыть чат», чтобы добавить чат в список скрытых.</string>
+    <string name="HiddenChatsInfo">Эти чаты скрыты из основного списка и видны только при вводе пароля в поиске. Нажмите на чат, чтобы показать его.</string>
+    <string name="SecurityPasswordTitle">Защитный пароль</string>
+    <string name="SecurityPasswordIsSet">Защитный пароль установлен.\n\nКогда вы вводите этот пароль вместо настоящего, показывается пустой список скрытых чатов. Используйте это, если кто-то заставляет вас показать скрытые чаты.</string>
+    <string name="SecurityPasswordNotSetMessage">Установите защитный пароль, который показывает пустой список скрытых чатов.\n\nИспользуйте это, если кто-то заставляет вас показать скрытые чаты — введите этот пароль вместо настоящего, и они ничего не увидят.</string>
+    <string name="SetPassword">Установить пароль</string>
+    <string name="SetSecurityPassword">Установить защитный пароль</string>
+    <string name="SecurityPasswordMustBeDifferent">Защитный пароль должен отличаться от основного пароля.</string>
+    <string name="SecurityPasswordSetSuccess">Защитный пароль установлен.\n\nКогда вы введёте этот пароль в поиске, покажется пустой список.</string>
+    <string name="SecurityPasswordRemoved">Защитный пароль удалён.</string>
+    <string name="Removed">Удалено</string>
+    <string name="Change">Изменить</string>
+    <string name="Remove">Удалить</string>
+    <string name="Set">Установить</string>
+    <string name="Enter">Войти</string>
 </resources>

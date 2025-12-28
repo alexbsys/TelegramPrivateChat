@@ -158,6 +158,7 @@ import org.telegram.messenger.FileLoader;
 import org.telegram.messenger.FileLog;
 import org.telegram.messenger.FlagSecureReason;
 import org.telegram.messenger.HashtagSearchController;
+import org.telegram.messenger.HiddenChatsManager;
 import org.telegram.messenger.ImageLoader;
 import org.telegram.messenger.ImageLocation;
 import org.telegram.messenger.ImageReceiver;
@@ -19003,18 +19004,35 @@ public class ChatActivity extends BaseFragment implements
         } else if (chatMode == MODE_PINNED) {
             avatarContainer.setTitle(LocaleController.formatPluralString("PinnedMessagesCount", getPinnedMessagesCount()));
         } else if (currentChat != null) {
-            avatarContainer.setTitle(AndroidUtilities.removeRTL(AndroidUtilities.removeDiacritics(currentChat.title)), currentChat.scam, currentChat.fake, currentChat.verified, false, currentChat.emoji_status, animated);
+            String title = AndroidUtilities.removeRTL(AndroidUtilities.removeDiacritics(currentChat.title));
+            // Add lock emoji for hidden chats
+            if (HiddenChatsManager.getInstance().isHiddenChat(dialog_id)) {
+                title = "\uD83D\uDD12 " + title;
+            }
+            avatarContainer.setTitle(title, currentChat.scam, currentChat.fake, currentChat.verified, false, currentChat.emoji_status, animated);
         } else if (currentUser != null) {
             if (currentUser.self) {
                 avatarContainer.setTitle(LocaleController.getString(R.string.SavedMessages));
             } else if (!MessagesController.isSupportUser(currentUser) && getContactsController().contactsDict.get(currentUser.id) == null && (getContactsController().contactsDict.size() != 0 || !getContactsController().isLoadingContacts())) {
                 if (!TextUtils.isEmpty(currentUser.phone)) {
-                    avatarContainer.setTitle(PhoneFormat.getInstance().format("+" + currentUser.phone), currentUser.scam, currentUser.fake, currentUser.verified, getMessagesController().isPremiumUser(currentUser), currentUser.emoji_status, animated);
+                    String title = PhoneFormat.getInstance().format("+" + currentUser.phone);
+                    if (HiddenChatsManager.getInstance().isHiddenChat(dialog_id)) {
+                        title = "\uD83D\uDD12 " + title;
+                    }
+                    avatarContainer.setTitle(title, currentUser.scam, currentUser.fake, currentUser.verified, getMessagesController().isPremiumUser(currentUser), currentUser.emoji_status, animated);
                 } else {
-                    avatarContainer.setTitle(AndroidUtilities.removeRTL(AndroidUtilities.removeDiacritics(UserObject.getUserName(currentUser))), currentUser.scam, currentUser.fake, currentUser.verified, getMessagesController().isPremiumUser(currentUser), currentUser.emoji_status, animated);
+                    String title = AndroidUtilities.removeRTL(AndroidUtilities.removeDiacritics(UserObject.getUserName(currentUser)));
+                    if (HiddenChatsManager.getInstance().isHiddenChat(dialog_id)) {
+                        title = "\uD83D\uDD12 " + title;
+                    }
+                    avatarContainer.setTitle(title, currentUser.scam, currentUser.fake, currentUser.verified, getMessagesController().isPremiumUser(currentUser), currentUser.emoji_status, animated);
                 }
             } else {
-                avatarContainer.setTitle(AndroidUtilities.removeRTL(AndroidUtilities.removeDiacritics(UserObject.getUserName(currentUser))), currentUser.scam, currentUser.fake, currentUser.verified, getMessagesController().isPremiumUser(currentUser), !MessagesController.isSupportUser(currentUser) ? currentUser.emoji_status : null, animated);
+                String title = AndroidUtilities.removeRTL(AndroidUtilities.removeDiacritics(UserObject.getUserName(currentUser)));
+                if (HiddenChatsManager.getInstance().isHiddenChat(dialog_id)) {
+                    title = "\uD83D\uDD12 " + title;
+                }
+                avatarContainer.setTitle(title, currentUser.scam, currentUser.fake, currentUser.verified, getMessagesController().isPremiumUser(currentUser), !MessagesController.isSupportUser(currentUser) ? currentUser.emoji_status : null, animated);
             }
         }
         setParentActivityTitle(avatarContainer.getTitleTextView().getText());

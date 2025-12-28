@@ -605,7 +605,41 @@ public class SearchViewPager extends ViewPagerFixed implements FilteredSearchVie
             reset = true;
         }
         lastSearchString = text;
+        
+        // Check if text is the hidden chats password
+        org.telegram.messenger.HiddenChatsManager hiddenManager = org.telegram.messenger.HiddenChatsManager.getInstance();
+        if (hiddenManager.isPasswordQuery(text)) {
+            // Enter hidden chats mode and show only hidden chats
+            hiddenManager.setHiddenChatsMode(true);
+            showHiddenChatsOnly();
+            return;
+        } else {
+            // Exit hidden chats mode if we were in it
+            if (hiddenManager.isHiddenChatsMode()) {
+                hiddenManager.setHiddenChatsMode(false);
+            }
+        }
+        
         search(view, getCurrentPosition(), text, reset);
+    }
+    
+    private void showHiddenChatsOnly() {
+        // Show only hidden chats in search results
+        org.telegram.messenger.HiddenChatsManager hiddenManager = org.telegram.messenger.HiddenChatsManager.getInstance();
+        java.util.Set<Long> hiddenIds = hiddenManager.getHiddenDialogIds();
+        
+        if (dialogsSearchAdapter != null) {
+            dialogsSearchAdapter.searchDialogsForHiddenChats(hiddenIds);
+        }
+        
+        if (emptyView != null) {
+            if (hiddenIds.isEmpty()) {
+                emptyView.subtitle.setText("No hidden chats");
+            } else {
+                emptyView.subtitle.setText("Hidden chats");
+            }
+            emptyView.subtitle.setVisibility(View.VISIBLE);
+        }
     }
 
     protected long getDialogId(String query) {

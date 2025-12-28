@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="AppName">Telegram</string>
-    <string name="AppNameBeta">Telegram Beta</string>
+    <string name="AppName">TelegramPrivateChat</string>
+    <string name="AppNameBeta">TelegramPrivateChat Beta</string>
     <string name="LanguageName">English</string>
     <string name="English">English</string>
     <string name="LanguageNameInEnglish">English</string>
@@ -10192,4 +10192,48 @@
     <string name="GiftAuctionWearInfo2Text">Your profile page will get the color and the symbol of this item.</string>
     <string name="GiftAuctionWearInfo3Header">Proof of Ownership</string>
     <string name="GiftAuctionWearInfo3Text">Tapping the icon of this item next to your name will show its info and owner.</string>
+
+    <!-- Advanced Safety Control (Hidden Chats) -->
+    <string name="AdvancedSafetyControl">Advanced Safety Control</string>
+    <string name="HiddenChats">Hidden Chats</string>
+    <string name="SetupHiddenChatsPassword">Setup Hidden Chats Password</string>
+    <string name="EnterHiddenChatsPassword">Enter Hidden Chats Password</string>
+    <string name="HideChat">Hide Chat</string>
+    <string name="UnhideChat">Unhide Chat</string>
+    <string name="SecurityPassword">Security Password</string>
+    <string name="SecurityPasswordSet">set</string>
+    <string name="SecurityPasswordNotSet">not set</string>
+    <string name="CurrentPassword">Current Password</string>
+    <string name="ConfirmNewPassword">Confirm New Password</string>
+    <string name="ConfirmPassword">Confirm Password</string>
+    <string name="Password">Password</string>
+    <string name="PasswordCannotBeEmpty">Password cannot be empty</string>
+    <string name="PasswordsDoNotMatch">Passwords do not match</string>
+    <string name="CurrentPasswordIncorrect">Current password is incorrect</string>
+    <string name="IncorrectPassword">Incorrect password</string>
+    <string name="PasswordChangedSuccessfully">Password changed successfully</string>
+    <string name="Success">Success</string>
+    <string name="Error">Error</string>
+    <string name="AlreadyHidden">Already Hidden</string>
+    <string name="ChatAlreadyHidden">This chat is already hidden.</string>
+    <string name="ChatHidden">Chat Hidden</string>
+    <string name="ChatHiddenMessage">\"%s\" has been hidden. Enter your password in the search field to show hidden chats.</string>
+    <string name="NoHiddenChats">No Hidden Chats</string>
+    <string name="NoHiddenChatsMessage">You don\'t have any hidden chats.</string>
+    <string name="SelectChatToUnhide">Select Chat to Unhide</string>
+    <string name="SelectChatToHide">Select a chat to hide</string>
+    <string name="UnhideThisChat">Do you want to unhide this chat?</string>
+    <string name="HiddenChatsCount">Hidden Chats (%d)</string>
+    <string name="NoHiddenChatsYet">No hidden chats yet. Use \'Hide Chat\' to add any chat to the hidden list.</string>
+    <string name="HiddenChatsInfo">These chats are hidden from the main list and only visible when you enter the password in search. Tap on a chat to unhide it.</string>
+    <string name="SecurityPasswordTitle">Security Password</string>
+    <string name="SecurityPasswordIsSet">Security password is set.\n\nWhen you enter this password instead of the real one, an empty hidden chats list will be shown. Use this if someone forces you to reveal your hidden chats.</string>
+    <string name="SecurityPasswordNotSetMessage">Set a security password that shows an empty hidden chats list.\n\nUse this if someone forces you to reveal your hidden chats - enter this password instead of the real one, and they will see nothing.</string>
+    <string name="SetPassword">Set Password</string>
+    <string name="SetSecurityPassword">Set Security Password</string>
+    <string name="SecurityPasswordMustBeDifferent">Security password must be different from your main password.</string>
+    <string name="SecurityPasswordSetSuccess">Security password set successfully.\n\nWhen you enter this password in search, an empty list will be shown.</string>
+    <string name="SecurityPasswordRemoved">Security password has been removed.</string>
+    <string name="Removed">Removed</string>
+    <string name="Enter">Enter</string>
 </resources>
