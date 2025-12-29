@@ -1484,6 +1484,29 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
         drawerLayoutContainer.closeDrawer(false);
     }
 
+    /**
+     * Close hidden chat when app resumes - user should not stay in hidden chat after minimizing app
+     */
+    private void closeHiddenChatIfOpen() {
+        HiddenChatsManager hiddenManager = HiddenChatsManager.getInstance();
+        BaseFragment currentFragment = getLastFragment();
+        
+        if (currentFragment instanceof ChatActivity) {
+            ChatActivity chatActivity = (ChatActivity) currentFragment;
+            long dialogId = chatActivity.getDialogId();
+            
+            // Check if this is a hidden chat (from any list)
+            if (hiddenManager.isHiddenChat(dialogId)) {
+                // Close this chat and go back to dialogs
+                currentFragment.finishFragment();
+                
+                // Also reset hidden chats mode and decoy mode
+                hiddenManager.exitHiddenChatsMode();
+                hiddenManager.resetDecoyMode();
+            }
+        }
+    }
+
     private void openHiddenChatsWithPassword() {
         HiddenChatsManager manager = HiddenChatsManager.getInstance();
         
@@ -7076,6 +7099,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
         HiddenChatsManager hiddenManager = HiddenChatsManager.getInstance();
         if (hiddenManager.isHiddenChatsMode()) {
             hiddenManager.exitHiddenChatsMode();
+            hiddenManager.resetDecoyMode();
             // Close current fragment if it's a hidden chat
             BaseFragment currentFragment = getLastFragment();
             if (currentFragment instanceof ChatActivity) {
@@ -7276,6 +7300,10 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
     protected void onResume() {
         super.onResume();
         isResumed = true;
+        
+        // If user was in a hidden chat, close it and go to main dialogs list
+        closeHiddenChatIfOpen();
+        
         pipActivityHandler.onResume();
         if (onResumeStaticCallback != null) {
             onResumeStaticCallback.run();

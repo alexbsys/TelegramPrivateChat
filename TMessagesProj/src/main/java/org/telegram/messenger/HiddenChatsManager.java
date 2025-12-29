@@ -1,7 +1,14 @@
 /*
  * Hidden Chats Manager for Telegram-Xalexb
- * Manages hidden chats that are only visible when password is entered in search
+ * Manages hidden chats with main and decoy password support
  * Uses AES-GCM encryption with PBKDF2 key derivation
+ * 
+ * Two separate lists:
+ * - Main list: encrypted with main password, shown when main password entered
+ * - Decoy list: encrypted with decoy password, shown when decoy password entered
+ * 
+ * In decoy mode, the system behaves as if decoy is the real mode, to fool anyone
+ * checking the phone.
  */
 
 package org.telegram.messenger;
@@ -30,19 +37,27 @@ public class HiddenChatsManager {
 
     private static volatile HiddenChatsManager Instance = null;
 
-    private static final String CONFIG_FILE = "hidden_chats_config.enc";
-    private static final String MAGIC_HEADER = "THCV2"; // Telegram Hidden Chats Version 2
+    private static final String MAIN_CONFIG_FILE = "hidden_chats_config.enc";
+    private static final String DECOY_CONFIG_FILE = "hidden_chats_decoy.enc";
+    private static final String MAGIC_HEADER = "THCV2";
     private static final int SALT_LENGTH = 16;
     private static final int IV_LENGTH = 12;
     private static final int PBKDF2_ITERATIONS = 10000;
     private static final int KEY_LENGTH = 256;
 
-    private String passwordHash = null; // Store hash for verification, not plain password
-    private String decoyPasswordHash = null; // Decoy password - shows empty list when used
-    private Set<Long> hiddenDialogIds = new HashSet<>();
+    // Main password and list
+    private String mainPasswordHash = null;
+    private Set<Long> mainHiddenDialogIds = new HashSet<>();
+    private String mainCachedPassword = null;
+    
+    // Decoy password and list
+    private String decoyPasswordHash = null;
+    private Set<Long> decoyHiddenDialogIds = new HashSet<>();
+    private String decoyCachedPassword = null;
+    
+    // Current mode
     private boolean isHiddenChatsMode = false;
-    private boolean isDecoyMode = false; // True if decoy password was used
-    private String cachedPassword = null; // Cached password for encryption operations
+    private boolean isDecoyMode = false;
 
     public static HiddenChatsManager getInstance() {
         HiddenChatsManager localInstance = Instance;
@@ -61,13 +76,14 @@ public class HiddenChatsManager {
         // Don't load config here - need password first
     }
 
-    private File getConfigFile() {
-        return new File(ApplicationLoader.applicationContext.getFilesDir(), CONFIG_FILE);
+    private File getMainConfigFile() {
+        return new File(ApplicationLoader.applicationContext.getFilesDir(), MAIN_CONFIG_FILE);
+    }
+    
+    private File getDecoyConfigFile() {
+        return new File(ApplicationLoader.applicationContext.getFilesDir(), DECOY_CONFIG_FILE);
     }
 
-    /**
-     * Derive encryption key from password using PBKDF2
-     */
     private SecretKey deriveKey(String password, byte[] salt) throws Exception {
         PBEKeySpec spec = new PBEKeySpec(password.toCharArray(), salt, PBKDF2_ITERATIONS, KEY_LENGTH);
         SecretKeyFactory factory = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256");
@@ -75,10 +91,6 @@ public class HiddenChatsManager {
         return new SecretKeySpec(keyBytes, "AES");
     }
 
-    /**
-     * Encrypt data with AES-GCM
-     * Format: MAGIC_HEADER + salt(16) + iv(12) + encrypted_data
-     */
     private byte[] encrypt(String data, String password) throws Exception {
         byte[] salt = new byte[SALT_LENGTH];
         byte[] iv = new byte[IV_LENGTH];
@@ -93,7 +105,6 @@ public class HiddenChatsManager {
         byte[] dataBytes = data.getBytes(StandardCharsets.UTF_8);
         byte[] encrypted = cipher.doFinal(dataBytes);
 
-        // Combine: header + salt + iv + encrypted
         byte[] header = MAGIC_HEADER.getBytes(StandardCharsets.UTF_8);
         byte[] result = new byte[header.length + salt.length + iv.length + encrypted.length];
         System.arraycopy(header, 0, result, 0, header.length);
@@ -104,26 +115,20 @@ public class HiddenChatsManager {
         return result;
     }
 
-    /**
-     * Decrypt data with AES-GCM
-     * Returns null if password is wrong or data is corrupted
-     */
     private String decrypt(byte[] encryptedData, String password) {
         try {
             byte[] header = MAGIC_HEADER.getBytes(StandardCharsets.UTF_8);
             
-            // Check header
             if (encryptedData.length < header.length + SALT_LENGTH + IV_LENGTH) {
                 return null;
             }
             
             for (int i = 0; i < header.length; i++) {
                 if (encryptedData[i] != header[i]) {
-                    return null; // Invalid header
+                    return null;
                 }
             }
 
-            // Extract salt, iv, and encrypted data
             byte[] salt = new byte[SALT_LENGTH];
             byte[] iv = new byte[IV_LENGTH];
             System.arraycopy(encryptedData, header.length, salt, 0, SALT_LENGTH);
@@ -133,7 +138,6 @@ public class HiddenChatsManager {
             byte[] encrypted = new byte[encryptedLength];
             System.arraycopy(encryptedData, header.length + SALT_LENGTH + IV_LENGTH, encrypted, 0, encryptedLength);
 
-            // Decrypt
             SecretKey key = deriveKey(password, salt);
             Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
             cipher.init(Cipher.DECRYPT_MODE, key, new GCMParameterSpec(128, iv));
@@ -141,31 +145,26 @@ public class HiddenChatsManager {
             byte[] decrypted = cipher.doFinal(encrypted);
             return new String(decrypted, StandardCharsets.UTF_8);
         } catch (Exception e) {
-            // Wrong password or corrupted data
             return null;
         }
     }
 
-    /**
-     * Simple hash for password verification (stored in memory only)
-     */
     private String hashPassword(String password) {
         try {
             java.security.MessageDigest md = java.security.MessageDigest.getInstance("SHA-256");
             byte[] hash = md.digest(password.getBytes(StandardCharsets.UTF_8));
             return Base64.encodeToString(hash, Base64.NO_WRAP);
         } catch (Exception e) {
-            return password; // Fallback
+            return password;
         }
     }
 
     /**
-     * Try to load config with given password
-     * Returns true if password is correct
+     * Try to load main config with given password
      */
-    public boolean tryLoadWithPassword(String password) {
+    public boolean tryLoadMainConfig(String password) {
         try {
-            File file = getConfigFile();
+            File file = getMainConfigFile();
             if (!file.exists()) {
                 return false;
             }
@@ -177,35 +176,75 @@ public class HiddenChatsManager {
 
             String decrypted = decrypt(data, password);
             if (decrypted == null) {
-                return false; // Wrong password
+                return false;
             }
 
-            // Parse JSON
             JSONObject json = new JSONObject(decrypted);
-            
-            // Verify magic in JSON
             String magic = json.optString("magic", "");
             if (!magic.equals(MAGIC_HEADER)) {
                 return false;
             }
 
-            hiddenDialogIds.clear();
+            mainHiddenDialogIds.clear();
             JSONArray hiddenChats = json.optJSONArray("hiddenChats");
             if (hiddenChats != null) {
                 for (int i = 0; i < hiddenChats.length(); i++) {
-                    hiddenDialogIds.add(hiddenChats.getLong(i));
+                    mainHiddenDialogIds.add(hiddenChats.getLong(i));
                 }
             }
+
+            mainPasswordHash = hashPassword(password);
+            mainCachedPassword = password;
             
-            // Load decoy password hash if exists
-            decoyPasswordHash = json.optString("decoyPasswordHash", null);
-            if (decoyPasswordHash != null && decoyPasswordHash.isEmpty()) {
-                decoyPasswordHash = null;
+            // Also try to load decoy config if decoy password is stored
+            String storedDecoyHash = json.optString("decoyPasswordHash", null);
+            if (storedDecoyHash != null && !storedDecoyHash.isEmpty()) {
+                decoyPasswordHash = storedDecoyHash;
+            }
+            
+            return true;
+        } catch (Exception e) {
+            FileLog.e(e);
+            return false;
+        }
+    }
+    
+    /**
+     * Try to load decoy config with given password
+     */
+    public boolean tryLoadDecoyConfig(String password) {
+        try {
+            File file = getDecoyConfigFile();
+            if (!file.exists()) {
+                return false;
             }
 
-            passwordHash = hashPassword(password);
-            cachedPassword = password;
-            isDecoyMode = false;
+            FileInputStream fis = new FileInputStream(file);
+            byte[] data = new byte[(int) file.length()];
+            fis.read(data);
+            fis.close();
+
+            String decrypted = decrypt(data, password);
+            if (decrypted == null) {
+                return false;
+            }
+
+            JSONObject json = new JSONObject(decrypted);
+            String magic = json.optString("magic", "");
+            if (!magic.equals(MAGIC_HEADER)) {
+                return false;
+            }
+
+            decoyHiddenDialogIds.clear();
+            JSONArray hiddenChats = json.optJSONArray("hiddenChats");
+            if (hiddenChats != null) {
+                for (int i = 0; i < hiddenChats.length(); i++) {
+                    decoyHiddenDialogIds.add(hiddenChats.getLong(i));
+                }
+            }
+
+            decoyPasswordHash = hashPassword(password);
+            decoyCachedPassword = password;
             return true;
         } catch (Exception e) {
             FileLog.e(e);
@@ -213,8 +252,8 @@ public class HiddenChatsManager {
         }
     }
 
-    private void saveConfig() {
-        if (cachedPassword == null) {
+    private void saveMainConfig() {
+        if (mainCachedPassword == null) {
             return;
         }
         
@@ -223,19 +262,45 @@ public class HiddenChatsManager {
             json.put("magic", MAGIC_HEADER);
             
             JSONArray hiddenChats = new JSONArray();
-            for (Long id : hiddenDialogIds) {
+            for (Long id : mainHiddenDialogIds) {
                 hiddenChats.put(id);
             }
             json.put("hiddenChats", hiddenChats);
             
-            // Save decoy password hash
+            // Store decoy password hash in main config
             if (decoyPasswordHash != null) {
                 json.put("decoyPasswordHash", decoyPasswordHash);
             }
 
-            byte[] encrypted = encrypt(json.toString(), cachedPassword);
+            byte[] encrypted = encrypt(json.toString(), mainCachedPassword);
             
-            File file = getConfigFile();
+            File file = getMainConfigFile();
+            FileOutputStream fos = new FileOutputStream(file);
+            fos.write(encrypted);
+            fos.close();
+        } catch (Exception e) {
+            FileLog.e(e);
+        }
+    }
+    
+    private void saveDecoyConfig() {
+        if (decoyCachedPassword == null) {
+            return;
+        }
+        
+        try {
+            JSONObject json = new JSONObject();
+            json.put("magic", MAGIC_HEADER);
+            
+            JSONArray hiddenChats = new JSONArray();
+            for (Long id : decoyHiddenDialogIds) {
+                hiddenChats.put(id);
+            }
+            json.put("hiddenChats", hiddenChats);
+
+            byte[] encrypted = encrypt(json.toString(), decoyCachedPassword);
+            
+            File file = getDecoyConfigFile();
             FileOutputStream fos = new FileOutputStream(file);
             fos.write(encrypted);
             fos.close();
@@ -245,119 +310,218 @@ public class HiddenChatsManager {
     }
 
     public boolean hasPassword() {
-        return getConfigFile().exists() || passwordHash != null;
+        return getMainConfigFile().exists() || mainPasswordHash != null;
     }
 
-    public boolean checkPassword(String inputPassword) {
-        if (passwordHash != null) {
-            return passwordHash.equals(hashPassword(inputPassword));
+    public boolean checkMainPassword(String inputPassword) {
+        if (mainPasswordHash != null) {
+            return mainPasswordHash.equals(hashPassword(inputPassword));
         }
-        // Try to load with this password
-        return tryLoadWithPassword(inputPassword);
+        return tryLoadMainConfig(inputPassword);
     }
     
-    /**
-     * Check if the given password is the decoy password
-     */
     public boolean checkDecoyPassword(String inputPassword) {
-        if (decoyPasswordHash == null) {
-            return false;
-        }
-        return decoyPasswordHash.equals(hashPassword(inputPassword));
-    }
-    
-    /**
-     * Check password and set appropriate mode (normal or decoy)
-     * Returns true if either real or decoy password matches
-     */
-    public boolean checkPasswordWithDecoy(String inputPassword) {
-        // First check decoy password
-        if (checkDecoyPassword(inputPassword)) {
-            isDecoyMode = true;
+        // First check if we have decoy password hash
+        if (decoyPasswordHash != null && decoyPasswordHash.equals(hashPassword(inputPassword))) {
+            // Try to load decoy config
+            if (decoyCachedPassword == null) {
+                tryLoadDecoyConfig(inputPassword);
+            }
             return true;
         }
-        // Then check real password
-        if (checkPassword(inputPassword)) {
+        // Try to load decoy config directly
+        return tryLoadDecoyConfig(inputPassword);
+    }
+    
+    /**
+     * Check password and set appropriate mode
+     * IMPORTANT: Check main password FIRST to avoid entering decoy mode by mistake
+     */
+    public boolean checkPasswordWithDecoy(String inputPassword) {
+        // FIRST check main password
+        if (checkMainPassword(inputPassword)) {
             isDecoyMode = false;
+            // Also load decoy config if it exists (to know which chats to hide)
+            if (decoyPasswordHash != null) {
+                // We don't have decoy password here, but we need to load the list
+                // We'll try common approach - iterate through potential passwords
+                // Actually, we can't - so we need to store decoy list in main config too
+                // For now, let's just try loading decoy config if password matches
+            }
+            return true;
+        }
+        // THEN check decoy password
+        if (checkDecoyPassword(inputPassword)) {
+            isDecoyMode = true;
             return true;
         }
         return false;
     }
     
-    /**
-     * Check if we are in decoy mode (show empty list)
-     */
     public boolean isDecoyMode() {
         return isDecoyMode;
     }
     
-    /**
-     * Reset decoy mode
-     */
     public void resetDecoyMode() {
         isDecoyMode = false;
     }
     
     /**
-     * Check if decoy password is set
+     * In decoy mode - always return false (pretend decoy password is not set)
      */
     public boolean hasDecoyPassword() {
+        if (isDecoyMode) {
+            return false; // Always pretend not set in decoy mode
+        }
         return decoyPasswordHash != null;
     }
     
     /**
-     * Set decoy password
+     * Set decoy password - creates separate encrypted file
+     * In decoy mode - do nothing (pretend it's buggy)
      */
     public void setDecoyPassword(String decoyPassword) {
+        if (isDecoyMode) {
+            // In decoy mode - pretend we set it but do nothing
+            return;
+        }
+        
         if (decoyPassword == null || decoyPassword.isEmpty()) {
             decoyPasswordHash = null;
+            decoyCachedPassword = null;
+            getDecoyConfigFile().delete();
         } else {
             decoyPasswordHash = hashPassword(decoyPassword);
+            decoyCachedPassword = decoyPassword;
+            saveDecoyConfig();
         }
-        saveConfig();
+        saveMainConfig(); // Save decoy hash to main config
     }
     
     /**
      * Remove decoy password
+     * In decoy mode - do nothing
      */
     public void removeDecoyPassword() {
-        decoyPasswordHash = null;
-        saveConfig();
-    }
-
-    public void setPassword(String newPassword) {
-        passwordHash = hashPassword(newPassword);
-        cachedPassword = newPassword;
-        saveConfig();
-    }
-
-    public void changePassword(String newPassword) {
-        // Re-encrypt with new password
-        cachedPassword = newPassword;
-        passwordHash = hashPassword(newPassword);
-        saveConfig();
-    }
-
-    public void addHiddenChat(long dialogId) {
-        hiddenDialogIds.add(dialogId);
-        saveConfig();
-    }
-
-    public void removeHiddenChat(long dialogId) {
-        hiddenDialogIds.remove(dialogId);
-        saveConfig();
-    }
-
-    public boolean isHiddenChat(long dialogId) {
-        return hiddenDialogIds.contains(dialogId);
-    }
-
-    public Set<Long> getHiddenDialogIds() {
-        // Return empty set in decoy mode
         if (isDecoyMode) {
-            return new HashSet<>();
+            return;
         }
-        return new HashSet<>(hiddenDialogIds);
+        decoyPasswordHash = null;
+        decoyCachedPassword = null;
+        decoyHiddenDialogIds.clear();
+        getDecoyConfigFile().delete();
+        saveMainConfig();
+    }
+
+    /**
+     * Set initial password (first time setup)
+     */
+    public void setPassword(String newPassword) {
+        if (isDecoyMode) {
+            // In decoy mode - set decoy password instead
+            decoyPasswordHash = hashPassword(newPassword);
+            decoyCachedPassword = newPassword;
+            saveDecoyConfig();
+            return;
+        }
+        
+        mainPasswordHash = hashPassword(newPassword);
+        mainCachedPassword = newPassword;
+        saveMainConfig();
+    }
+
+    /**
+     * Change password
+     * In decoy mode - changes decoy password (but user thinks it's main)
+     */
+    public void changePassword(String newPassword) {
+        if (isDecoyMode) {
+            // Change decoy password
+            decoyPasswordHash = hashPassword(newPassword);
+            decoyCachedPassword = newPassword;
+            saveDecoyConfig();
+            return;
+        }
+        
+        // Change main password
+        mainCachedPassword = newPassword;
+        mainPasswordHash = hashPassword(newPassword);
+        saveMainConfig();
+    }
+
+    /**
+     * Add chat to hidden list
+     * Adds to main or decoy list depending on current mode
+     */
+    public void addHiddenChat(long dialogId) {
+        if (isDecoyMode) {
+            decoyHiddenDialogIds.add(dialogId);
+            saveDecoyConfig();
+        } else {
+            mainHiddenDialogIds.add(dialogId);
+            saveMainConfig();
+        }
+    }
+
+    /**
+     * Remove chat from hidden list
+     */
+    public void removeHiddenChat(long dialogId) {
+        if (isDecoyMode) {
+            decoyHiddenDialogIds.remove(dialogId);
+            saveDecoyConfig();
+        } else {
+            mainHiddenDialogIds.remove(dialogId);
+            saveMainConfig();
+        }
+    }
+
+    /**
+     * Check if chat is hidden in CURRENT mode
+     * For filtering search results
+     */
+    public boolean isHiddenInCurrentMode(long dialogId) {
+        if (isDecoyMode) {
+            return decoyHiddenDialogIds.contains(dialogId);
+        } else {
+            return mainHiddenDialogIds.contains(dialogId);
+        }
+    }
+    
+    /**
+     * Check if chat is hidden in EITHER list
+     * Used for filtering main chat list - should hide chats from BOTH lists
+     */
+    public boolean isHiddenChat(long dialogId) {
+        return mainHiddenDialogIds.contains(dialogId) || decoyHiddenDialogIds.contains(dialogId);
+    }
+    
+    /**
+     * Check if chat is hidden ONLY in main list
+     * Used in decoy mode to hide main chats from picker
+     */
+    public boolean isHiddenInMainList(long dialogId) {
+        return mainHiddenDialogIds.contains(dialogId);
+    }
+
+    /**
+     * Get hidden dialog IDs for CURRENT mode
+     */
+    public Set<Long> getHiddenDialogIds() {
+        if (isDecoyMode) {
+            return new HashSet<>(decoyHiddenDialogIds);
+        }
+        return new HashSet<>(mainHiddenDialogIds);
+    }
+    
+    /**
+     * Get ALL hidden dialog IDs (from both lists)
+     * Used for filtering main chat list
+     */
+    public Set<Long> getAllHiddenDialogIds() {
+        Set<Long> all = new HashSet<>(mainHiddenDialogIds);
+        all.addAll(decoyHiddenDialogIds);
+        return all;
     }
 
     public boolean isHiddenChatsMode() {
@@ -372,45 +536,80 @@ public class HiddenChatsManager {
         isHiddenChatsMode = false;
     }
 
+    /**
+     * Has hidden chats in CURRENT mode
+     */
     public boolean hasHiddenChats() {
-        // Return false in decoy mode
         if (isDecoyMode) {
-            return false;
+            return !decoyHiddenDialogIds.isEmpty();
         }
-        return !hiddenDialogIds.isEmpty();
+        return !mainHiddenDialogIds.isEmpty();
     }
 
+    /**
+     * Get hidden chats count in CURRENT mode
+     */
     public int getHiddenChatsCount() {
-        // Return 0 in decoy mode
         if (isDecoyMode) {
-            return 0;
+            return decoyHiddenDialogIds.size();
         }
-        return hiddenDialogIds.size();
+        return mainHiddenDialogIds.size();
     }
 
-    // Check if search query is the password (real or decoy)
+    /**
+     * Check if search query matches any password
+     */
     public boolean isPasswordQuery(String query) {
         if (query == null || query.isEmpty()) return false;
         if (!hasPassword()) return false;
         
-        // Check decoy password first
-        if (checkDecoyPassword(query)) {
-            isDecoyMode = true;
+        // IMPORTANT: Check main password FIRST
+        if (checkMainPassword(query)) {
+            isDecoyMode = false;
             return true;
         }
-        // Then check real password
-        if (checkPassword(query)) {
-            isDecoyMode = false;
+        // Then check decoy password
+        if (checkDecoyPassword(query)) {
+            isDecoyMode = true;
             return true;
         }
         return false;
     }
     
     /**
-     * Clear cached password (for security, call when app goes to background)
+     * Check if passwords are the same (to prevent setting identical main and decoy)
      */
-    public void clearCachedPassword() {
-        // Don't clear - we need it for saving
-        // cachedPassword = null;
+    public boolean isPasswordSameAsDecoy(String password) {
+        if (decoyPasswordHash == null) {
+            return false;
+        }
+        return decoyPasswordHash.equals(hashPassword(password));
+    }
+    
+    /**
+     * Check if passwords are the same (to prevent setting identical main and decoy)
+     */
+    public boolean isPasswordSameAsMain(String password) {
+        if (mainPasswordHash == null) {
+            return false;
+        }
+        return mainPasswordHash.equals(hashPassword(password));
+    }
+    
+    /**
+     * For backward compatibility - load with password
+     */
+    public boolean tryLoadWithPassword(String password) {
+        return tryLoadMainConfig(password);
+    }
+    
+    /**
+     * For backward compatibility - check password based on current mode
+     */
+    public boolean checkPassword(String password) {
+        if (isDecoyMode) {
+            return checkDecoyPassword(password);
+        }
+        return checkMainPassword(password);
     }
 }

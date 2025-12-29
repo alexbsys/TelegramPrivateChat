@@ -7,11 +7,40 @@ on:
     branches: [ master, main ]
   workflow_dispatch:  # Allow manual trigger
 
+env:
+  # Shared cleanup script
+  CLEANUP_SCRIPT: |
+    echo "=== Before cleanup ===" && df -h
+    sudo rm -rf /usr/share/dotnet /opt/ghc /opt/hostedtoolcache/CodeQL /opt/hostedtoolcache/go \
+      /opt/hostedtoolcache/node /usr/local/share/boost /usr/share/swift /usr/share/miniconda \
+      /usr/local/graalvm /usr/local/.ghcup "$AGENT_TOOLSDIRECTORY" \
+      /usr/local/lib/android/sdk/ndk/21.* /usr/local/lib/android/sdk/ndk/22.* \
+      /usr/local/lib/android/sdk/ndk/23.* /usr/local/lib/android/sdk/ndk/24.* 2>/dev/null || true
+    sudo apt-get remove -y '^aspnetcore-.*' '^dotnet-.*' '^llvm-.*' 'php.*' \
+      azure-cli google-cloud-sdk microsoft-edge-stable google-chrome-stable firefox 2>/dev/null || true
+    sudo apt-get autoremove -y && sudo apt-get clean && sudo rm -rf /var/lib/apt/lists/*
+    sudo docker system prune --all --force 2>/dev/null || true
+    echo "=== After cleanup ===" && df -h
+
 jobs:
   build-debug:
     runs-on: ubuntu-latest
     
     steps:
+    - name: Free disk space
+      run: |
+        echo "=== Before cleanup ===" && df -h
+        sudo rm -rf /usr/share/dotnet /opt/ghc /opt/hostedtoolcache/CodeQL /opt/hostedtoolcache/go \
+          /opt/hostedtoolcache/node /usr/local/share/boost /usr/share/swift /usr/share/miniconda \
+          /usr/local/graalvm /usr/local/.ghcup "$AGENT_TOOLSDIRECTORY" \
+          /usr/local/lib/android/sdk/ndk/21.* /usr/local/lib/android/sdk/ndk/22.* \
+          /usr/local/lib/android/sdk/ndk/23.* /usr/local/lib/android/sdk/ndk/24.* 2>/dev/null || true
+        sudo apt-get remove -y '^aspnetcore-.*' '^dotnet-.*' '^llvm-.*' 'php.*' \
+          azure-cli google-cloud-sdk microsoft-edge-stable google-chrome-stable firefox 2>/dev/null || true
+        sudo apt-get autoremove -y && sudo apt-get clean && sudo rm -rf /var/lib/apt/lists/*
+        sudo docker system prune --all --force 2>/dev/null || true
+        echo "=== After cleanup ===" && df -h
+
     - name: Checkout repository
       uses: actions/checkout@v4
       with:
@@ -35,8 +64,13 @@ jobs:
     - name: Grant execute permission for gradlew
       run: chmod +x gradlew
     
+    - name: List available tasks
+      run: ./gradlew :TMessagesProj_App:tasks --group=build | head -100
+    
     - name: Build Debug APK
-      run: ./gradlew :TMessagesProj_App:assembleAfatDebug
+      run: |
+        ./gradlew :TMessagesProj_App:assembleAfatDebug --no-daemon --max-workers=2
+        echo "=== Disk after build ===" && df -h
     
     - name: Upload Debug APK
       uses: actions/upload-artifact@v4
@@ -46,11 +80,9 @@ jobs:
         retention-days: 14
 
   # Release build - only runs if RELEASE_KEYSTORE_BASE64 secret exists
-  # To enable: add RELEASE_KEYSTORE_BASE64, RELEASE_KEY_PASSWORD, RELEASE_KEY_ALIAS, RELEASE_STORE_PASSWORD secrets
   build-release:
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main')
-    # This job will be skipped if secrets are not configured
     continue-on-error: true
     
     steps:
@@ -63,6 +95,21 @@ jobs:
         else
           echo "has_secrets=true" >> $GITHUB_OUTPUT
         fi
+    
+    - name: Free disk space
+      if: steps.check-secrets.outputs.has_secrets == 'true'
+      run: |
+        echo "=== Before cleanup ===" && df -h
+        sudo rm -rf /usr/share/dotnet /opt/ghc /opt/hostedtoolcache/CodeQL /opt/hostedtoolcache/go \
+          /opt/hostedtoolcache/node /usr/local/share/boost /usr/share/swift /usr/share/miniconda \
+          /usr/local/graalvm /usr/local/.ghcup "$AGENT_TOOLSDIRECTORY" \
+          /usr/local/lib/android/sdk/ndk/21.* /usr/local/lib/android/sdk/ndk/22.* \
+          /usr/local/lib/android/sdk/ndk/23.* /usr/local/lib/android/sdk/ndk/24.* 2>/dev/null || true
+        sudo apt-get remove -y '^aspnetcore-.*' '^dotnet-.*' '^llvm-.*' 'php.*' \
+          azure-cli google-cloud-sdk microsoft-edge-stable google-chrome-stable firefox 2>/dev/null || true
+        sudo apt-get autoremove -y && sudo apt-get clean && sudo rm -rf /var/lib/apt/lists/*
+        sudo docker system prune --all --force 2>/dev/null || true
+        echo "=== After cleanup ===" && df -h
     
     - name: Checkout repository
       if: steps.check-secrets.outputs.has_secrets == 'true'
@@ -103,7 +150,7 @@ jobs:
         RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
         RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
         RELEASE_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
-      run: ./gradlew :TMessagesProj_App:assembleAfatRelease
+      run: ./gradlew :TMessagesProj_App:assembleAfatRelease --no-daemon --max-workers=2
     
     - name: Upload Release APK
       if: steps.check-secrets.outputs.has_secrets == 'true'

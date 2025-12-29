@@ -450,6 +450,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
     public long replyMessageAuthor;
     public long forwardOriginalChannel;
     private int initialDialogsType;
+    private boolean hideMainHiddenChats; // In decoy mode, hide chats from main hidden list
 
     private boolean checkingImportDialog;
 
@@ -2741,6 +2742,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
             allowBots = arguments.getBoolean("allowBots", true);
             closeFragment = arguments.getBoolean("closeFragment", true);
             allowGlobalSearch = arguments.getBoolean("allowGlobalSearch", true);
+            hideMainHiddenChats = arguments.getBoolean("hideMainHiddenChats", false);
 
             byte[] requestPeerTypeBytes = arguments.getByteArray("requestPeerType");
             if (requestPeerTypeBytes != null) {
@@ -6776,6 +6778,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
         }
         // Always exit hidden chats mode when closing search
         HiddenChatsManager.getInstance().exitHiddenChatsMode();
+        HiddenChatsManager.getInstance().resetDecoyMode();
     }
 
     public void scrollToFolder(int fid) {
@@ -10207,6 +10210,7 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
     private void closeSearch() {
         // Always exit hidden chats mode when closing search
         HiddenChatsManager.getInstance().exitHiddenChatsMode();
+        HiddenChatsManager.getInstance().resetDecoyMode();
         
         if (AndroidUtilities.isTablet()) {
             if (actionBar != null) {
@@ -11236,16 +11240,19 @@ public class DialogsActivity extends BaseFragment implements NotificationCenter.
             ArrayList<TLRPC.Dialog> dialogs = messagesController.dialogsForward;
             // Filter out hidden chats from forward/share list
             HiddenChatsManager hiddenManager = HiddenChatsManager.getInstance();
-            if (hiddenManager.hasHiddenChats()) {
-                ArrayList<TLRPC.Dialog> filtered = new ArrayList<>();
-                for (TLRPC.Dialog dialog : dialogs) {
-                    if (!hiddenManager.isHiddenChat(dialog.id)) {
-                        filtered.add(dialog);
-                    }
+            ArrayList<TLRPC.Dialog> filtered = new ArrayList<>();
+            for (TLRPC.Dialog dialog : dialogs) {
+                // Always filter chats from both lists
+                if (hiddenManager.isHiddenChat(dialog.id)) {
+                    continue;
                 }
-                return filtered;
+                // In decoy mode (hideMainHiddenChats), also hide main list chats from picker
+                if (hideMainHiddenChats && hiddenManager.isHiddenInMainList(dialog.id)) {
+                    continue;
+                }
+                filtered.add(dialog);
             }
-            return dialogs;
+            return filtered;
         } else if (dialogsType == DIALOGS_TYPE_USERS_ONLY || dialogsType == DIALOGS_TYPE_IMPORT_HISTORY_USERS) {
             return messagesController.dialogsUsersOnly;
         } else if (dialogsType == DIALOGS_TYPE_CHANNELS_ONLY) {
