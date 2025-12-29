@@ -28,6 +28,10 @@ public class CallSettingsManager {
     private boolean disableP2P = false; // If true, force relay-only mode (no direct P2P connections)
     private List<TurnServer> customTurnServers = new ArrayList<>();
     
+    // Call server mode
+    private boolean useCallServer = false; // If true, fetch TURN servers from call server instead of manual
+    private String callServerUrl = ""; // URL of the call manager server
+    
     public static final int SERVER_TYPE_TURN = 0;
     public static final int SERVER_TYPE_STUN = 1;
     
@@ -147,6 +151,8 @@ public class CallSettingsManager {
             useTCP = json.optBoolean("use_tcp", false);
             replaceStandardServers = json.optBoolean("replace_standard", false);
             disableP2P = json.optBoolean("disable_p2p", false);
+            useCallServer = json.optBoolean("use_call_server", false);
+            callServerUrl = json.optString("call_server_url", "");
             
             customTurnServers.clear();
             JSONArray serversArray = json.optJSONArray("turn_servers");
@@ -168,6 +174,8 @@ public class CallSettingsManager {
             json.put("use_tcp", useTCP);
             json.put("replace_standard", replaceStandardServers);
             json.put("disable_p2p", disableP2P);
+            json.put("use_call_server", useCallServer);
+            json.put("call_server_url", callServerUrl);
             
             JSONArray serversArray = new JSONArray();
             for (TurnServer server : customTurnServers) {
@@ -221,6 +229,45 @@ public class CallSettingsManager {
         saveSettings();
     }
     
+    // Effective settings - returns server mode values when useCallServer is true
+    // These should be used in actual call logic
+    
+    public boolean getEffectiveForceWebRTC() {
+        return useCallServer ? true : forceWebRTC;
+    }
+    
+    public boolean getEffectiveUseTCP() {
+        // When using call server, TCP is not forced - server provides TURN servers
+        // which may have their own transport settings (some TCP, some UDP)
+        return useCallServer ? false : useTCP;
+    }
+    
+    public boolean getEffectiveReplaceStandardServers() {
+        return useCallServer ? true : replaceStandardServers;
+    }
+    
+    public boolean getEffectiveDisableP2P() {
+        return useCallServer ? true : disableP2P;
+    }
+    
+    public boolean isUseCallServer() {
+        return useCallServer;
+    }
+    
+    public void setUseCallServer(boolean use) {
+        this.useCallServer = use;
+        saveSettings();
+    }
+    
+    public String getCallServerUrl() {
+        return callServerUrl;
+    }
+    
+    public void setCallServerUrl(String url) {
+        this.callServerUrl = url != null ? url : "";
+        saveSettings();
+    }
+    
     public List<TurnServer> getCustomTurnServers() {
         return new ArrayList<>(customTurnServers);
     }
@@ -265,11 +312,12 @@ public class CallSettingsManager {
         return !getEnabledTurnServers().isEmpty();
     }
     
-    // Message prefix for sharing settings
-    public static final String SETTINGS_PREFIX = "📞CALLSETTINGS:";
+    // Message prefix for sharing settings (emoji header + base64 encoded JSON)
+    public static final String SETTINGS_PREFIX = "📞🔧 CryptoGram Call Settings\n";
+    public static final String SETTINGS_DATA_PREFIX = "DATA:";
     
     /**
-     * Export current settings as a shareable JSON string with prefix
+     * Export current settings as a shareable base64-encoded string with emoji header
      */
     public String exportSettingsForSharing() {
         try {
@@ -285,7 +333,13 @@ public class CallSettingsManager {
             }
             json.put("turn_servers", serversArray);
             
-            return SETTINGS_PREFIX + json.toString();
+            // Encode JSON to base64
+            String base64 = android.util.Base64.encodeToString(
+                json.toString().getBytes("UTF-8"), 
+                android.util.Base64.NO_WRAP
+            );
+            
+            return SETTINGS_PREFIX + SETTINGS_DATA_PREFIX + base64;
         } catch (Exception e) {
             FileLog.e(e);
             return null;
@@ -296,7 +350,17 @@ public class CallSettingsManager {
      * Check if a message contains call settings
      */
     public static boolean isCallSettingsMessage(String text) {
-        return text != null && text.startsWith(SETTINGS_PREFIX);
+        if (text == null) return false;
+        return text.contains(SETTINGS_DATA_PREFIX) && text.contains("CryptoGram Call Settings");
+    }
+    
+    /**
+     * Extract base64 data from message
+     */
+    private static String extractBase64Data(String message) {
+        int dataIndex = message.indexOf(SETTINGS_DATA_PREFIX);
+        if (dataIndex < 0) return null;
+        return message.substring(dataIndex + SETTINGS_DATA_PREFIX.length()).trim();
     }
     
     /**
@@ -309,7 +373,12 @@ public class CallSettingsManager {
         }
         
         try {
-            String jsonStr = message.substring(SETTINGS_PREFIX.length());
+            String base64 = extractBase64Data(message);
+            if (base64 == null) return false;
+            
+            // Decode base64 to JSON
+            byte[] decodedBytes = android.util.Base64.decode(base64, android.util.Base64.NO_WRAP);
+            String jsonStr = new String(decodedBytes, "UTF-8");
             JSONObject json = new JSONObject(jsonStr);
             
             forceWebRTC = json.optBoolean("force_webrtc", false);
@@ -343,7 +412,11 @@ public class CallSettingsManager {
         }
         
         try {
-            String jsonStr = message.substring(SETTINGS_PREFIX.length());
+            String base64 = extractBase64Data(message);
+            if (base64 == null) return null;
+            
+            byte[] decodedBytes = android.util.Base64.decode(base64, android.util.Base64.NO_WRAP);
+            String jsonStr = new String(decodedBytes, "UTF-8");
             JSONObject json = new JSONObject(jsonStr);
             
             StringBuilder sb = new StringBuilder();

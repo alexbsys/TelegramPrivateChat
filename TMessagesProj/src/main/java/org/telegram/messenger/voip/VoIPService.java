@@ -118,6 +118,8 @@ import org.telegram.messenger.UserConfig;
 import org.telegram.messenger.UserObject;
 import org.telegram.messenger.Utilities;
 import org.telegram.messenger.XiaomiUtilities;
+import org.telegram.messenger.CallServerManager;
+import org.telegram.messenger.CallSettingsManager;
 import org.telegram.messenger.utils.tlutils.TlUtils;
 import org.telegram.tgnet.ConnectionsManager;
 import org.telegram.tgnet.SerializedData;
@@ -157,6 +159,7 @@ import java.lang.reflect.Method;
 import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -217,6 +220,12 @@ public class VoIPService extends Service implements SensorEventListener, AudioMa
 	private static Runnable setModeRunnable;
 	private static final Object sync = new Object();
 	private NetworkInfo lastNetInfo;
+	
+	// Call server tariff info
+	private String callTariff = null; // FREE or PAID
+	private double freeMinutesRemaining = -1; // -1 = don't show
+	private String periodEnd = null;
+	private List<CallSettingsManager.TurnServer> callServerTurnServers = null;
 	private int currentState = 0;
 	private boolean wasConnected;
 
@@ -899,7 +908,7 @@ public class VoIPService extends Service implements SensorEventListener, AudioMa
 				} else {
 					delayedStartOutgoingCall = () -> {
 						delayedStartOutgoingCall = null;
-						startOutgoingCall();
+						prepareAndStartOutgoingCall();
 					};
 					AndroidUtilities.runOnUIThread(delayedStartOutgoingCall, 2000);
 				}
@@ -1044,6 +1053,85 @@ public class VoIPService extends Service implements SensorEventListener, AudioMa
 		}
 	}
 
+	private void prepareAndStartOutgoingCall() {
+		CallSettingsManager callSettings = CallSettingsManager.getInstance();
+		
+		// Check if we should use call server
+		if (callSettings.isUseCallServer()) {
+			String serverUrl = callSettings.getCallServerUrl();
+			if (serverUrl == null || serverUrl.isEmpty()) {
+				// No server URL configured, show error
+				AndroidUtilities.runOnUIThread(() -> {
+					showCallServerError(LocaleController.getString("CallServerUrlNotSet", R.string.CallServerUrlNotSet));
+				});
+				return;
+			}
+			
+			// Get call ID for server request
+			long callId = privateCall != null ? privateCall.id : System.currentTimeMillis();
+			
+			// Fetch TURN servers from call server
+			CallServerManager.getInstance().fetchTurnServers(callId, new CallServerManager.TurnServersCallback() {
+				@Override
+				public void onSuccess(CallServerManager.TurnServersResponse response) {
+					// Save tariff info
+					callTariff = response.tariff;
+					freeMinutesRemaining = response.freeMinutesRemaining;
+					periodEnd = response.periodEnd;
+					callServerTurnServers = response.servers;
+					
+					// Now start the actual call
+					AndroidUtilities.runOnUIThread(() -> startOutgoingCall());
+				}
+				
+				@Override
+				public void onError(String errorHtml) {
+					AndroidUtilities.runOnUIThread(() -> {
+						showCallServerError(errorHtml);
+					});
+				}
+			});
+		} else {
+			// Use manual TURN servers, start call directly
+			startOutgoingCall();
+		}
+	}
+	
+	private void showCallServerError(String errorHtml) {
+		// Cancel the call
+		callEnded();
+		
+		// Show error dialog
+		try {
+			Activity activity = LaunchActivity.getLastFragment() != null ? 
+				LaunchActivity.getLastFragment().getParentActivity() : null;
+			if (activity != null) {
+				android.app.AlertDialog.Builder builder = new android.app.AlertDialog.Builder(activity);
+				builder.setTitle(LocaleController.getString("CallsCurrentlyUnavailable", R.string.CallsCurrentlyUnavailable));
+				
+				// Parse HTML links in error message
+				CharSequence message;
+				if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.N) {
+					message = android.text.Html.fromHtml(errorHtml, android.text.Html.FROM_HTML_MODE_LEGACY);
+				} else {
+					message = android.text.Html.fromHtml(errorHtml);
+				}
+				builder.setMessage(message);
+				builder.setPositiveButton(LocaleController.getString("OK", R.string.OK), null);
+				android.app.AlertDialog dialog = builder.create();
+				dialog.show();
+				
+				// Make links clickable
+				android.widget.TextView messageView = dialog.findViewById(android.R.id.message);
+				if (messageView != null) {
+					messageView.setMovementMethod(android.text.method.LinkMovementMethod.getInstance());
+				}
+			}
+		} catch (Exception e) {
+			FileLog.e(e);
+		}
+	}
+	
 	private void startOutgoingCall() {
 		if (USE_CONNECTION_SERVICE && systemCallConnection != null) {
 			systemCallConnection.setDialing();
@@ -3409,7 +3497,7 @@ public class VoIPService extends Service implements SensorEventListener, AudioMa
 			final String logFilePath = BuildVars.DEBUG_VERSION ? VoIPHelper.getLogFilePath("voip" + privateCall.id) : VoIPHelper.getLogFilePath("" + privateCall.id, false);
 			final String statsLogFilePath = VoIPHelper.getLogFilePath("" + privateCall.id, true);
 			// Check if P2P should be disabled (force relay-only mode)
-			final boolean p2pAllowed = privateCall.p2p_allowed && !CallSettingsManager.getInstance().isDisableP2P();
+			final boolean p2pAllowed = privateCall.p2p_allowed && !CallSettingsManager.getInstance().getEffectiveDisableP2P();
 			final Instance.Config config = new Instance.Config(initializationTimeout, receiveTimeout, voipDataSaving, p2pAllowed, enableAec, enableNs, true, false, serverConfig.enableStunMarking, logFilePath, statsLogFilePath, privateCall.protocol.max_layer, privateCall.custom_parameters == null ? "" : privateCall.custom_parameters.data);
 			lastLogFilePath = logFilePath;
 
@@ -3420,11 +3508,11 @@ public class VoIPService extends Service implements SensorEventListener, AudioMa
 			final boolean forceTcp = preferences.getBoolean("dbg_force_tcp_in_calls", false);
 			final int endpointType = forceTcp ? Instance.ENDPOINT_TYPE_TCP_RELAY : Instance.ENDPOINT_TYPE_UDP_RELAY;
 			
-			// Get custom call settings
+			// Get custom call settings (use effective settings that account for server mode)
 			CallSettingsManager callSettings = CallSettingsManager.getInstance();
-			final boolean forceWebRTC = callSettings.isForceWebRTC();
-			final boolean useTcpForTurn = callSettings.isUseTCP();
-			final boolean replaceStandard = callSettings.isReplaceStandardServers();
+			final boolean forceWebRTC = callSettings.getEffectiveForceWebRTC();
+			final boolean useTcpForTurn = callSettings.getEffectiveUseTCP();
+			final boolean replaceStandard = callSettings.getEffectiveReplaceStandardServers();
 			final java.util.List<CallSettingsManager.TurnServer> customTurnServers = callSettings.getEnabledTurnServers();
 			final boolean hasCustomServers = !customTurnServers.isEmpty();
 			
@@ -3804,6 +3892,27 @@ public class VoIPService extends Service implements SensorEventListener, AudioMa
 
 	public boolean isMicMute() {
 		return micMute;
+	}
+	
+	// Call server tariff getters
+	public String getCallTariff() {
+		return callTariff;
+	}
+	
+	public double getFreeMinutesRemaining() {
+		return freeMinutesRemaining;
+	}
+	
+	public String getPeriodEnd() {
+		return periodEnd;
+	}
+	
+	public boolean shouldShowFreeTimer() {
+		return CallServerManager.TARIFF_FREE.equals(callTariff) && freeMinutesRemaining >= 0;
+	}
+	
+	public boolean shouldShowPeriodEnd() {
+		return periodEnd != null && !periodEnd.isEmpty();
 	}
 
 	public void toggleSpeakerphoneOrShowRouteSheet(Context context, boolean fromOverlayWindow) {
@@ -4542,7 +4651,7 @@ public class VoIPService extends Service implements SensorEventListener, AudioMa
 			if (isOutgoing) {
 				delayedStartOutgoingCall = () -> {
 					delayedStartOutgoingCall = null;
-					startOutgoingCall();
+					prepareAndStartOutgoingCall();
 				};
 				AndroidUtilities.runOnUIThread(delayedStartOutgoingCall, 2000);
 			}

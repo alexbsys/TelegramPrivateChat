@@ -21,6 +21,7 @@ import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
 import org.telegram.messenger.AndroidUtilities;
+import org.telegram.messenger.CallServerManager;
 import org.telegram.messenger.CallSettingsManager;
 import org.telegram.ui.Components.BulletinFactory;
 import org.telegram.messenger.LocaleController;
@@ -48,6 +49,12 @@ public class AdvancedCallSettingsActivity extends BaseFragment {
 
     // Row indices
     private int rowCount;
+    private int serverModeHeaderRow;
+    private int useCallServerRow;
+    private int callServerUrlRow;
+    private int checkTariffRow;
+    private int tariffInfoRow;
+    private int serverModeInfoRow;
     private int settingsHeaderRow;
     private int forceWebRTCRow;
     private int useTCPRow;
@@ -71,30 +78,64 @@ public class AdvancedCallSettingsActivity extends BaseFragment {
 
     private void updateRows() {
         rowCount = 0;
+        boolean useCallServer = CallSettingsManager.getInstance().isUseCallServer();
         
-        settingsHeaderRow = rowCount++;
-        forceWebRTCRow = rowCount++;
-        useTCPRow = rowCount++;
-        disableP2PRow = rowCount++;
-        replaceStandardRow = rowCount++;
-        settingsInfoRow = rowCount++;
-        shareSettingsRow = rowCount++;
-        importSettingsRow = rowCount++;
-        
-        turnServersHeaderRow = rowCount++;
-        
-        List<CallSettingsManager.TurnServer> servers = CallSettingsManager.getInstance().getCustomTurnServers();
-        if (!servers.isEmpty()) {
-            turnServersStartRow = rowCount;
-            rowCount += servers.size();
-            turnServersEndRow = rowCount;
+        // Server mode section
+        serverModeHeaderRow = rowCount++;
+        useCallServerRow = rowCount++;
+        if (useCallServer) {
+            callServerUrlRow = rowCount++;
+            checkTariffRow = rowCount++;
+            tariffInfoRow = rowCount++;
         } else {
+            callServerUrlRow = -1;
+            checkTariffRow = -1;
+            tariffInfoRow = -1;
+        }
+        serverModeInfoRow = rowCount++;
+        
+        // Hide manual settings when server mode is enabled
+        if (!useCallServer) {
+            // WebRTC settings section
+            settingsHeaderRow = rowCount++;
+            forceWebRTCRow = rowCount++;
+            useTCPRow = rowCount++;
+            disableP2PRow = rowCount++;
+            replaceStandardRow = rowCount++;
+            settingsInfoRow = rowCount++;
+            shareSettingsRow = rowCount++;
+            importSettingsRow = rowCount++;
+            
+            turnServersHeaderRow = rowCount++;
+            
+            List<CallSettingsManager.TurnServer> servers = CallSettingsManager.getInstance().getCustomTurnServers();
+            if (!servers.isEmpty()) {
+                turnServersStartRow = rowCount;
+                rowCount += servers.size();
+                turnServersEndRow = rowCount;
+            } else {
+                turnServersStartRow = -1;
+                turnServersEndRow = -1;
+            }
+            
+            addTurnServerRow = rowCount++;
+            turnServersInfoRow = rowCount++;
+        } else {
+            // Hide all manual settings
+            settingsHeaderRow = -1;
+            forceWebRTCRow = -1;
+            useTCPRow = -1;
+            disableP2PRow = -1;
+            replaceStandardRow = -1;
+            settingsInfoRow = -1;
+            shareSettingsRow = -1;
+            importSettingsRow = -1;
+            turnServersHeaderRow = -1;
             turnServersStartRow = -1;
             turnServersEndRow = -1;
+            addTurnServerRow = -1;
+            turnServersInfoRow = -1;
         }
-        
-        addTurnServerRow = rowCount++;
-        turnServersInfoRow = rowCount++;
     }
 
     @Override
@@ -121,7 +162,20 @@ public class AdvancedCallSettingsActivity extends BaseFragment {
         frameLayout.addView(listView, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, LayoutHelper.MATCH_PARENT));
         listView.setAdapter(listAdapter = new ListAdapter(context));
         listView.setOnItemClickListener((view, position) -> {
-            if (position == forceWebRTCRow) {
+            if (position == useCallServerRow) {
+                CallSettingsManager manager = CallSettingsManager.getInstance();
+                boolean newValue = !manager.isUseCallServer();
+                manager.setUseCallServer(newValue);
+                if (view instanceof TextCheckCell) {
+                    ((TextCheckCell) view).setChecked(newValue);
+                }
+                updateRows();
+                listAdapter.notifyDataSetChanged();
+            } else if (position == callServerUrlRow) {
+                showCallServerUrlDialog();
+            } else if (position == checkTariffRow) {
+                checkTariff();
+            } else if (position == forceWebRTCRow) {
                 CallSettingsManager manager = CallSettingsManager.getInstance();
                 manager.setForceWebRTC(!manager.isForceWebRTC());
                 if (view instanceof TextCheckCell) {
@@ -402,7 +456,9 @@ public class AdvancedCallSettingsActivity extends BaseFragment {
             switch (holder.getItemViewType()) {
                 case 0: // Header
                     HeaderCell headerCell = (HeaderCell) holder.itemView;
-                    if (position == settingsHeaderRow) {
+                    if (position == serverModeHeaderRow) {
+                        headerCell.setText(LocaleController.getString("CallServerMode", R.string.CallServerMode));
+                    } else if (position == settingsHeaderRow) {
                         headerCell.setText(LocaleController.getString("CallSettings", R.string.CallSettings));
                     } else if (position == turnServersHeaderRow) {
                         headerCell.setText(LocaleController.getString("TurnServers", R.string.TurnServers));
@@ -419,12 +475,23 @@ public class AdvancedCallSettingsActivity extends BaseFragment {
                     } else if (position == importSettingsRow) {
                         textCell.setTextAndIcon(LocaleController.getString("ImportCallSettings", R.string.ImportCallSettings), R.drawable.msg_download, false);
                         textCell.setColors(Theme.key_windowBackgroundWhiteBlueText4, Theme.key_windowBackgroundWhiteBlueText4);
+                    } else if (position == callServerUrlRow) {
+                        String url = CallSettingsManager.getInstance().getCallServerUrl();
+                        String value = (url != null && !url.isEmpty()) ? url : LocaleController.getString("NotSet", R.string.NotSet);
+                        textCell.setTextAndValue(LocaleController.getString("CallServerUrl", R.string.CallServerUrl), value, true);
+                    } else if (position == checkTariffRow) {
+                        textCell.setTextAndIcon(LocaleController.getString("CheckTariff", R.string.CheckTariff), R.drawable.msg_info, true);
+                        textCell.setColors(Theme.key_windowBackgroundWhiteBlueText4, Theme.key_windowBackgroundWhiteBlueText4);
+                    } else if (position == tariffInfoRow) {
+                        textCell.setText(LocaleController.getString("TariffInfoHint", R.string.TariffInfoHint), false);
                     }
                     break;
                 case 2: // TextCheckCell
                     TextCheckCell checkCell = (TextCheckCell) holder.itemView;
                     CallSettingsManager manager = CallSettingsManager.getInstance();
-                    if (position == forceWebRTCRow) {
+                    if (position == useCallServerRow) {
+                        checkCell.setTextAndCheck(LocaleController.getString("UseCallServer", R.string.UseCallServer), manager.isUseCallServer(), true);
+                    } else if (position == forceWebRTCRow) {
                         checkCell.setTextAndCheck(LocaleController.getString("ForceWebRTC", R.string.ForceWebRTC), manager.isForceWebRTC(), true);
                     } else if (position == useTCPRow) {
                         checkCell.setTextAndCheck(LocaleController.getString("UseTCPForTurn", R.string.UseTCPForTurn), manager.isUseTCP(), true);
@@ -451,7 +518,10 @@ public class AdvancedCallSettingsActivity extends BaseFragment {
                     break;
                 case 4: // Info
                     TextInfoPrivacyCell infoCell = (TextInfoPrivacyCell) holder.itemView;
-                    if (position == settingsInfoRow) {
+                    if (position == serverModeInfoRow) {
+                        infoCell.setText(LocaleController.getString("CallServerModeInfo", R.string.CallServerModeInfo));
+                        infoCell.setBackgroundDrawable(Theme.getThemedDrawableByKey(mContext, R.drawable.greydivider, Theme.key_windowBackgroundGrayShadow));
+                    } else if (position == settingsInfoRow) {
                         infoCell.setText(LocaleController.getString("CallSettingsInfo", R.string.CallSettingsInfo));
                         infoCell.setBackgroundDrawable(Theme.getThemedDrawableByKey(mContext, R.drawable.greydivider, Theme.key_windowBackgroundGrayShadow));
                     } else if (position == turnServersInfoRow) {
@@ -464,11 +534,13 @@ public class AdvancedCallSettingsActivity extends BaseFragment {
 
         @Override
         public int getItemViewType(int position) {
-            if (position == settingsHeaderRow || position == turnServersHeaderRow) {
+            if (position == serverModeHeaderRow || position == settingsHeaderRow || position == turnServersHeaderRow) {
                 return 0; // Header
-            } else if (position == addTurnServerRow || position == shareSettingsRow || position == importSettingsRow) {
+            } else if (position == addTurnServerRow || position == shareSettingsRow || position == importSettingsRow 
+                    || position == callServerUrlRow || position == checkTariffRow || position == tariffInfoRow) {
                 return 1; // TextCell
-            } else if (position == forceWebRTCRow || position == useTCPRow || position == disableP2PRow || position == replaceStandardRow) {
+            } else if (position == useCallServerRow || position == forceWebRTCRow || position == useTCPRow 
+                    || position == disableP2PRow || position == replaceStandardRow) {
                 return 2; // TextCheckCell
             } else if (position >= turnServersStartRow && position < turnServersEndRow) {
                 return 3; // Turn server
@@ -525,6 +597,98 @@ public class AdvancedCallSettingsActivity extends BaseFragment {
             }
         });
         builder.setNegativeButton(LocaleController.getString("Cancel", R.string.Cancel), null);
+        builder.show();
+    }
+    
+    private void showCallServerUrlDialog() {
+        Context context = getParentActivity();
+        if (context == null) return;
+        
+        AlertDialog.Builder builder = new AlertDialog.Builder(context);
+        builder.setTitle(LocaleController.getString("CallServerUrl", R.string.CallServerUrl));
+        
+        final EditText input = new EditText(context);
+        input.setHint("https://example.com/api");
+        input.setText(CallSettingsManager.getInstance().getCallServerUrl());
+        input.setInputType(android.text.InputType.TYPE_CLASS_TEXT | android.text.InputType.TYPE_TEXT_VARIATION_URI);
+        input.setSelection(input.getText().length());
+        
+        FrameLayout container = new FrameLayout(context);
+        FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.MATCH_PARENT,
+            FrameLayout.LayoutParams.WRAP_CONTENT
+        );
+        params.leftMargin = AndroidUtilities.dp(24);
+        params.rightMargin = AndroidUtilities.dp(24);
+        input.setLayoutParams(params);
+        container.addView(input);
+        builder.setView(container);
+        
+        builder.setPositiveButton(LocaleController.getString("Save", R.string.Save), (dialog, which) -> {
+            String url = input.getText().toString().trim();
+            CallSettingsManager.getInstance().setCallServerUrl(url);
+            if (listAdapter != null) {
+                listAdapter.notifyDataSetChanged();
+            }
+        });
+        builder.setNegativeButton(LocaleController.getString("Cancel", R.string.Cancel), null);
+        builder.show();
+    }
+    
+    private void checkTariff() {
+        Context context = getParentActivity();
+        if (context == null) return;
+        
+        String serverUrl = CallSettingsManager.getInstance().getCallServerUrl();
+        if (serverUrl == null || serverUrl.isEmpty()) {
+            BulletinFactory.of(this).createErrorBulletin(
+                LocaleController.getString("CallServerUrlNotSet", R.string.CallServerUrlNotSet)
+            ).show();
+            return;
+        }
+        
+        // Show loading
+        AlertDialog progressDialog = new AlertDialog(context, AlertDialog.ALERT_TYPE_SPINNER);
+        progressDialog.setCanCancel(false);
+        progressDialog.show();
+        
+        CallServerManager.getInstance().queryTariff(new CallServerManager.TariffCallback() {
+            @Override
+            public void onSuccess(CallServerManager.TariffResponse response) {
+                progressDialog.dismiss();
+                showTariffInfo(response);
+            }
+            
+            @Override
+            public void onError(String error) {
+                progressDialog.dismiss();
+                BulletinFactory.of(AdvancedCallSettingsActivity.this).createErrorBulletin(error).show();
+            }
+        });
+    }
+    
+    private void showTariffInfo(CallServerManager.TariffResponse response) {
+        Context context = getParentActivity();
+        if (context == null) return;
+        
+        StringBuilder message = new StringBuilder();
+        message.append(LocaleController.getString("Tariff", R.string.Tariff)).append(": ");
+        message.append(response.tariff).append("\n\n");
+        
+        if (CallServerManager.TARIFF_FREE.equals(response.tariff) && response.freeMinutesRemaining >= 0) {
+            message.append(LocaleController.getString("FreeMinutesRemaining", R.string.FreeMinutesRemaining)).append(": ");
+            message.append(String.format("%.1f", response.freeMinutesRemaining)).append("\n\n");
+        }
+        
+        if (response.periodEnd != null && !response.periodEnd.isEmpty()) {
+            message.append(LocaleController.getString("PeriodEnd", R.string.PeriodEnd)).append(": ");
+            message.append(response.periodEnd);
+        }
+        
+        AlertDialog.Builder builder = new AlertDialog.Builder(context);
+        builder.setTitle(LocaleController.getString("TariffInfo", R.string.TariffInfo));
+        builder.setMessage(message.toString());
+        builder.setPositiveButton(LocaleController.getString("OK", R.string.OK), null);
         builder.show();
     }
     

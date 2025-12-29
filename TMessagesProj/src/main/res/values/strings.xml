@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="AppName">TelegramPrivateChat</string>
-    <string name="AppNameBeta">TelegramPrivateChat Beta</string>
+    <string name="AppName">CryptoGram</string>
+    <string name="AppNameBeta">CryptoGram Beta</string>
     <string name="LanguageName">English</string>
     <string name="English">English</string>
     <string name="LanguageNameInEnglish">English</string>
@@ -10278,6 +10278,21 @@
     <string name="ClipboardEmpty">Clipboard is empty</string>
     <string name="NoCallSettingsInClipboard">No call settings found in clipboard</string>
     <string name="TapToApplySettings">📋 Copy this message and import in Advanced Call Settings</string>
+    <string name="CallServerMode">Call Server Mode</string>
+    <string name="UseCallServer">Use call manager server</string>
+    <string name="CallServerUrl">Server URL</string>
+    <string name="CheckTariff">Check tariff</string>
+    <string name="TariffInfo">Tariff Information</string>
+    <string name="TariffInfoHint">Tap to check your current tariff and remaining minutes</string>
+    <string name="CallServerModeInfo">When enabled, TURN servers will be fetched from the call manager server. Free users have limited daily minutes.</string>
+    <string name="CallServerUrlNotSet">Please set the call server URL first</string>
+    <string name="Tariff">Tariff</string>
+    <string name="FreeMinutesRemaining">Free minutes remaining</string>
+    <string name="PeriodEnd">Period ends</string>
+    <string name="NotSet">Not set</string>
+    <string name="CallsCurrentlyUnavailable">Calls are currently unavailable</string>
+    <string name="FreeTimeEnded">Free call time ended</string>
+    <string name="TimeRemaining">Time remaining</string>
     <string name="StartHiddenSecretChat">Start Hidden Secret Chat</string>
     <string name="ProtectedZone">Protected Zone</string>
     <string name="NeedSetProtectedZonePassword">You need to set a Protected Zone password first. Go to Settings → Advanced Safety Control.</string>

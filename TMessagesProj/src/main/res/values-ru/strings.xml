@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="AppName">TelegramPrivateChat</string>
-    <string name="AppNameBeta">TelegramPrivateChat Beta</string>
+    <string name="AppName">CryptoGram</string>
+    <string name="AppNameBeta">CryptoGram Beta</string>
     <string name="LanguageName">Русский</string>
     <string name="English">Английский</string>
     <string name="LanguageNameInEnglish">Russian</string>
@@ -353,6 +353,21 @@
     <string name="ClipboardEmpty">Буфер обмена пуст</string>
     <string name="NoCallSettingsInClipboard">В буфере нет настроек звонков</string>
     <string name="TapToApplySettings">📋 Скопируйте и импортируйте в настройках звонков</string>
+    <string name="CallServerMode">Режим сервера звонков</string>
+    <string name="UseCallServer">Использовать сервер управления звонками</string>
+    <string name="CallServerUrl">URL сервера</string>
+    <string name="CheckTariff">Проверить тариф</string>
+    <string name="TariffInfo">Информация о тарифе</string>
+    <string name="TariffInfoHint">Нажмите чтобы проверить тариф и остаток минут</string>
+    <string name="CallServerModeInfo">При включении TURN серверы будут получены с сервера управления звонками. Бесплатные пользователи имеют ограниченное время.</string>
+    <string name="CallServerUrlNotSet">Сначала укажите URL сервера</string>
+    <string name="Tariff">Тариф</string>
+    <string name="FreeMinutesRemaining">Осталось бесплатных минут</string>
+    <string name="PeriodEnd">Окончание периода</string>
+    <string name="NotSet">Не задано</string>
+    <string name="CallsCurrentlyUnavailable">Звонки сейчас недоступны</string>
+    <string name="FreeTimeEnded">Бесплатное время закончилось</string>
+    <string name="TimeRemaining">Осталось времени</string>
     <string name="StartHiddenSecretChat">Скрытый секретный чат</string>
     <string name="ProtectedZone">Защищённая зона</string>
     <string name="NeedSetProtectedZonePassword">Сначала установите пароль защищённой зоны. Настройки → Дополнительная безопасность.</string>
