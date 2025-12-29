@@ -73,6 +73,9 @@ public class HiddenChatsManager {
     public static final int ASK_PASSWORD_DISABLED = 0;
     public static final int ASK_PASSWORD_ALWAYS = 1;
     public static final int ASK_PASSWORD_IF_ENCRYPTED_CHATS = 2;
+    
+    // Flag to auto-hide next created secret chat
+    private boolean hideNextSecretChat = false;
 
     public static HiddenChatsManager getInstance() {
         HiddenChatsManager localInstance = Instance;
@@ -833,6 +836,25 @@ public class HiddenChatsManager {
             return true;
         } else if (mode == ASK_PASSWORD_IF_ENCRYPTED_CHATS) {
             return hasEncryptedChats();
+        }
+        return false;
+    }
+    
+    /**
+     * Set flag to hide the next created secret chat
+     */
+    public void setHideNextSecretChat(boolean hide) {
+        hideNextSecretChat = hide;
+    }
+    
+    /**
+     * Check and consume the hide next secret chat flag
+     * @return true if the flag was set (and is now cleared)
+     */
+    public boolean shouldHideNextSecretChat() {
+        if (hideNextSecretChat) {
+            hideNextSecretChat = false;
+            return true;
         }
         return false;
     }
