@@ -39,6 +39,7 @@ public class HiddenChatsManager {
 
     private static final String MAIN_CONFIG_FILE = "hidden_chats_config.enc";
     private static final String DECOY_CONFIG_FILE = "hidden_chats_decoy.enc";
+    private static final String FILTER_CACHE_FILE = "hidden_chats_filter.enc"; // For filtering without password
     private static final String MAGIC_HEADER = "THCV2";
     private static final int SALT_LENGTH = 16;
     private static final int IV_LENGTH = 12;
@@ -55,9 +56,23 @@ public class HiddenChatsManager {
     private Set<Long> decoyHiddenDialogIds = new HashSet<>();
     private String decoyCachedPassword = null;
     
+    // Combined filter set - loaded at startup for filtering WITHOUT password
+    // Contains IDs from BOTH main and decoy lists
+    private Set<Long> filterHiddenDialogIds = new HashSet<>();
+    
     // Current mode
     private boolean isHiddenChatsMode = false;
     private boolean isDecoyMode = false;
+    
+    // Settings
+    private static final String PREF_FORGET_PASSWORD_ON_MINIMIZE = "forget_password_on_minimize";
+    private static final String PREF_ASK_PASSWORD_ON_START_MODE = "ask_password_on_start_mode";
+    private static final String PREF_HAS_ENCRYPTED_CHATS = "has_encrypted_chats";
+    
+    // Ask password modes
+    public static final int ASK_PASSWORD_DISABLED = 0;
+    public static final int ASK_PASSWORD_ALWAYS = 1;
+    public static final int ASK_PASSWORD_IF_ENCRYPTED_CHATS = 2;
 
     public static HiddenChatsManager getInstance() {
         HiddenChatsManager localInstance = Instance;
@@ -73,7 +88,8 @@ public class HiddenChatsManager {
     }
 
     private HiddenChatsManager() {
-        // Don't load config here - need password first
+        // Load filter cache at startup (encrypted with device key, no password needed)
+        loadFilterCache();
     }
 
     private File getMainConfigFile() {
@@ -82,6 +98,99 @@ public class HiddenChatsManager {
     
     private File getDecoyConfigFile() {
         return new File(ApplicationLoader.applicationContext.getFilesDir(), DECOY_CONFIG_FILE);
+    }
+    
+    private File getFilterCacheFile() {
+        return new File(ApplicationLoader.applicationContext.getFilesDir(), FILTER_CACHE_FILE);
+    }
+    
+    /**
+     * Get device key for filter cache encryption
+     * This is not as secure as password, but allows filtering without user input
+     */
+    private String getDeviceKey() {
+        try {
+            String androidId = android.provider.Settings.Secure.getString(
+                ApplicationLoader.applicationContext.getContentResolver(),
+                android.provider.Settings.Secure.ANDROID_ID
+            );
+            if (androidId == null || androidId.isEmpty()) {
+                androidId = "telegram_hidden_default_key";
+            }
+            // Add some salt to make it less predictable
+            return "HiddenChatsFilter_" + androidId + "_v2";
+        } catch (Exception e) {
+            return "telegram_hidden_default_key_v2";
+        }
+    }
+    
+    /**
+     * Load filter cache at startup - contains combined IDs from main and decoy lists
+     * Encrypted with device key (not user password)
+     */
+    private void loadFilterCache() {
+        try {
+            File file = getFilterCacheFile();
+            if (!file.exists()) {
+                return;
+            }
+            
+            FileInputStream fis = new FileInputStream(file);
+            byte[] data = new byte[(int) file.length()];
+            fis.read(data);
+            fis.close();
+            
+            String decrypted = decrypt(data, getDeviceKey());
+            if (decrypted == null) {
+                return;
+            }
+            
+            JSONObject json = new JSONObject(decrypted);
+            JSONArray idsArray = json.optJSONArray("filter_ids");
+            if (idsArray != null) {
+                for (int i = 0; i < idsArray.length(); i++) {
+                    filterHiddenDialogIds.add(idsArray.getLong(i));
+                }
+            }
+            
+            FileLog.d("HiddenChatsManager: Loaded filter cache with " + filterHiddenDialogIds.size() + " IDs");
+        } catch (Exception e) {
+            FileLog.e("HiddenChatsManager: Error loading filter cache", e);
+        }
+    }
+    
+    /**
+     * Save filter cache - call after any changes to hidden chat lists
+     */
+    private void saveFilterCache() {
+        try {
+            // Combine both main and decoy lists
+            Set<Long> allIds = new HashSet<>();
+            allIds.addAll(mainHiddenDialogIds);
+            allIds.addAll(decoyHiddenDialogIds);
+            
+            // Also update in-memory filter
+            filterHiddenDialogIds.clear();
+            filterHiddenDialogIds.addAll(allIds);
+            
+            JSONObject json = new JSONObject();
+            JSONArray idsArray = new JSONArray();
+            for (Long id : allIds) {
+                idsArray.put(id);
+            }
+            json.put("filter_ids", idsArray);
+            
+            byte[] encrypted = encrypt(json.toString(), getDeviceKey());
+            
+            File file = getFilterCacheFile();
+            FileOutputStream fos = new FileOutputStream(file);
+            fos.write(encrypted);
+            fos.close();
+            
+            FileLog.d("HiddenChatsManager: Saved filter cache with " + allIds.size() + " IDs");
+        } catch (Exception e) {
+            FileLog.e("HiddenChatsManager: Error saving filter cache", e);
+        }
     }
 
     private SecretKey deriveKey(String password, byte[] salt) throws Exception {
@@ -202,6 +311,10 @@ public class HiddenChatsManager {
                 decoyPasswordHash = storedDecoyHash;
             }
             
+            // Load encrypted messages manager with main password
+            EncryptedMessagesManager.getInstance().loadWithPassword(password);
+            EncryptedMessagesManager.getInstance().setDecoyMode(false);
+            
             return true;
         } catch (Exception e) {
             FileLog.e(e);
@@ -278,6 +391,9 @@ public class HiddenChatsManager {
             FileOutputStream fos = new FileOutputStream(file);
             fos.write(encrypted);
             fos.close();
+            
+            // Update filter cache for startup filtering
+            saveFilterCache();
         } catch (Exception e) {
             FileLog.e(e);
         }
@@ -304,6 +420,9 @@ public class HiddenChatsManager {
             FileOutputStream fos = new FileOutputStream(file);
             fos.write(encrypted);
             fos.close();
+            
+            // Update filter cache for startup filtering
+            saveFilterCache();
         } catch (Exception e) {
             FileLog.e(e);
         }
@@ -428,6 +547,9 @@ public class HiddenChatsManager {
         mainPasswordHash = hashPassword(newPassword);
         mainCachedPassword = newPassword;
         saveMainConfig();
+        
+        // Initialize encrypted messages manager with this password
+        EncryptedMessagesManager.getInstance().loadWithPassword(newPassword);
     }
 
     /**
@@ -447,6 +569,9 @@ public class HiddenChatsManager {
         mainCachedPassword = newPassword;
         mainPasswordHash = hashPassword(newPassword);
         saveMainConfig();
+        
+        // Re-encrypt the encrypted messages passwords file with new password
+        EncryptedMessagesManager.getInstance().reEncryptWithNewPassword(newPassword);
     }
 
     /**
@@ -493,6 +618,12 @@ public class HiddenChatsManager {
      * Used for filtering main chat list - should hide chats from BOTH lists
      */
     public boolean isHiddenChat(long dialogId) {
+        // Always check filter cache first - it's loaded at startup without password
+        // This ensures hidden chats are filtered even before password is entered
+        if (filterHiddenDialogIds.contains(dialogId)) {
+            return true;
+        }
+        // Also check in-memory lists (in case filter cache wasn't loaded yet)
         return mainHiddenDialogIds.contains(dialogId) || decoyHiddenDialogIds.contains(dialogId);
     }
     
@@ -566,11 +697,13 @@ public class HiddenChatsManager {
         // IMPORTANT: Check main password FIRST
         if (checkMainPassword(query)) {
             isDecoyMode = false;
+            EncryptedMessagesManager.getInstance().setDecoyMode(false);
             return true;
         }
         // Then check decoy password
         if (checkDecoyPassword(query)) {
             isDecoyMode = true;
+            EncryptedMessagesManager.getInstance().setDecoyMode(true);
             return true;
         }
         return false;
@@ -611,5 +744,96 @@ public class HiddenChatsManager {
             return checkDecoyPassword(password);
         }
         return checkMainPassword(password);
+    }
+    
+    /**
+     * Get cached main password (for encrypted messages)
+     */
+    public String getMainCachedPassword() {
+        return mainCachedPassword;
+    }
+    
+    /**
+     * Check if main password is loaded (needed for encrypted messages feature)
+     */
+    public boolean isMainPasswordLoaded() {
+        return mainCachedPassword != null;
+    }
+    
+    /**
+     * Check if "forget password on minimize" setting is enabled
+     * Default: false (password is remembered)
+     */
+    public boolean isForgetPasswordOnMinimize() {
+        return ApplicationLoader.applicationContext
+            .getSharedPreferences("hiddenChatsPrefs", android.content.Context.MODE_PRIVATE)
+            .getBoolean(PREF_FORGET_PASSWORD_ON_MINIMIZE, false);
+    }
+    
+    /**
+     * Set "forget password on minimize" setting
+     */
+    public void setForgetPasswordOnMinimize(boolean forget) {
+        ApplicationLoader.applicationContext
+            .getSharedPreferences("hiddenChatsPrefs", android.content.Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean(PREF_FORGET_PASSWORD_ON_MINIMIZE, forget)
+            .apply();
+    }
+    
+    /**
+     * Get ask password on start mode
+     * @return ASK_PASSWORD_DISABLED, ASK_PASSWORD_ALWAYS, or ASK_PASSWORD_IF_ENCRYPTED_CHATS
+     */
+    public int getAskPasswordOnStartMode() {
+        return ApplicationLoader.applicationContext
+            .getSharedPreferences("hiddenChatsPrefs", android.content.Context.MODE_PRIVATE)
+            .getInt(PREF_ASK_PASSWORD_ON_START_MODE, ASK_PASSWORD_DISABLED);
+    }
+    
+    /**
+     * Set ask password on start mode
+     */
+    public void setAskPasswordOnStartMode(int mode) {
+        ApplicationLoader.applicationContext
+            .getSharedPreferences("hiddenChatsPrefs", android.content.Context.MODE_PRIVATE)
+            .edit()
+            .putInt(PREF_ASK_PASSWORD_ON_START_MODE, mode)
+            .apply();
+    }
+    
+    /**
+     * Check if there are any chats with encryption enabled (stored as flag)
+     */
+    public boolean hasEncryptedChats() {
+        return ApplicationLoader.applicationContext
+            .getSharedPreferences("hiddenChatsPrefs", android.content.Context.MODE_PRIVATE)
+            .getBoolean(PREF_HAS_ENCRYPTED_CHATS, false);
+    }
+    
+    /**
+     * Set flag indicating there are encrypted chats
+     */
+    public void setHasEncryptedChats(boolean has) {
+        ApplicationLoader.applicationContext
+            .getSharedPreferences("hiddenChatsPrefs", android.content.Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean(PREF_HAS_ENCRYPTED_CHATS, has)
+            .apply();
+    }
+    
+    /**
+     * Check if password should be asked based on current mode
+     */
+    public boolean shouldAskPasswordOnStart() {
+        int mode = getAskPasswordOnStartMode();
+        if (mode == ASK_PASSWORD_DISABLED) {
+            return false;
+        } else if (mode == ASK_PASSWORD_ALWAYS) {
+            return true;
+        } else if (mode == ASK_PASSWORD_IF_ENCRYPTED_CHATS) {
+            return hasEncryptedChats();
+        }
+        return false;
     }
 }

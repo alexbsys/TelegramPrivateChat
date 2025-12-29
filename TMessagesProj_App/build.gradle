@@ -109,6 +109,53 @@ android {
     flavorDimensions "minApi"
 
     productFlavors {
+        // Single architecture builds for CI (saves disk space)
+        arm64 {
+            dimension "minApi"
+            ndk {
+                abiFilters "arm64-v8a"
+            }
+            sourceSets.debug {
+                manifest.srcFile '../TMessagesProj/config/debug/AndroidManifest_SDK23.xml'
+            }
+            sourceSets.release {
+                manifest.srcFile '../TMessagesProj/config/release/AndroidManifest_SDK23.xml'
+            }
+            ext {
+                abiVersionCode = 7
+            }
+        }
+        armv7 {
+            dimension "minApi"
+            ndk {
+                abiFilters "armeabi-v7a"
+            }
+            sourceSets.debug {
+                manifest.srcFile '../TMessagesProj/config/debug/AndroidManifest_SDK23.xml'
+            }
+            sourceSets.release {
+                manifest.srcFile '../TMessagesProj/config/release/AndroidManifest_SDK23.xml'
+            }
+            ext {
+                abiVersionCode = 3
+            }
+        }
+        x86_64 {
+            dimension "minApi"
+            ndk {
+                abiFilters "x86_64"
+            }
+            sourceSets.debug {
+                manifest.srcFile '../TMessagesProj/config/debug/AndroidManifest_SDK23.xml'
+            }
+            sourceSets.release {
+                manifest.srcFile '../TMessagesProj/config/release/AndroidManifest_SDK23.xml'
+            }
+            ext {
+                abiVersionCode = 8
+            }
+        }
+        // Multi-architecture builds
         bundleAfat {
             ndk {
                 abiFilters "armeabi-v7a", "arm64-v8a", "x86", "x86_64"
@@ -162,7 +209,9 @@ android {
 
     variantFilter { variant ->
         def names = variant.flavors*.name
-        if (variant.buildType.name != "release" && !names.contains("afat")) {
+        // Allow debug builds for afat and single-arch flavors (arm64, armv7, x86_64)
+        boolean isAllowedDebug = names.contains("afat") || names.contains("arm64") || names.contains("armv7") || names.contains("x86_64")
+        if (variant.buildType.name != "release" && !isAllowedDebug) {
             setIgnore(true)
         }
     }

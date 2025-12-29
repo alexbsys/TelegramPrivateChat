@@ -159,6 +159,7 @@ import org.telegram.messenger.FileLog;
 import org.telegram.messenger.FlagSecureReason;
 import org.telegram.messenger.HashtagSearchController;
 import org.telegram.messenger.HiddenChatsManager;
+import org.telegram.messenger.EncryptedMessagesManager;
 import org.telegram.messenger.ImageLoader;
 import org.telegram.messenger.ImageLocation;
 import org.telegram.messenger.ImageReceiver;
@@ -1552,6 +1553,7 @@ public class ChatActivity extends BaseFragment implements
     private final static int bot_settings = 31;
     private final static int call = 32;
     private final static int video_call = 33;
+    private final static int encrypted_messages = 34;
 
     private final static int attach_photo = 0;
     private final static int attach_gallery = 1;
@@ -3877,6 +3879,8 @@ public class ChatActivity extends BaseFragment implements
                     getSendMessagesHelper().sendMessage(SendMessagesHelper.SendMessageParams.of("/settings", dialog_id, null, null, null, false, null, null, null, true, 0, 0, null, false));
                 } else if (id == search) {
                     openSearchWithText(isSupportedTags() ? "" : null);
+                } else if (id == encrypted_messages) {
+                    showEncryptedMessagesDialog();
                 } else if (id == translate) {
                     getMessagesController().getTranslateController().setHideTranslateDialog(getDialogId(), false, true);
                     if (!getMessagesController().getTranslateController().toggleTranslatingDialog(getDialogId(), true)) {
@@ -4266,6 +4270,8 @@ public class ChatActivity extends BaseFragment implements
             if (searchItem != null) {
                 headerItem.lazilyAddSubItem(search, R.drawable.msg_search, LocaleController.getString(R.string.Search));
             }
+            // Encrypted messages menu item
+            updateEncryptedMessagesMenuItem();
             if (ChatObject.isBoostSupported(currentChat) && (getUserConfig().isPremium() || ChatObject.isBoosted(chatInfo) || ChatObject.hasAdminRights(currentChat))) {
                 RLottieDrawable drawable = new RLottieDrawable(R.raw.boosts, "" + R.raw.boosts, dp(24), dp(24));
                 headerItem.lazilyAddSubItem(boost_group, drawable, LocaleController.getString(ChatObject.isChannelAndNotMegaGroup(currentChat) ? R.string.BoostingBoostChannelMenu : R.string.BoostingBoostGroupMenu));
@@ -29100,6 +29106,8 @@ public class ChatActivity extends BaseFragment implements
         }
         checkBotCommands();
         updateTitle(false);
+        updateEncryptedMessagesMenuItem();
+        checkForEncryptedMessagesNeedingPassword();
         showGigagroupConvertAlert();
 
         if (pullingDownOffset != 0) {
@@ -44498,5 +44506,298 @@ public class ChatActivity extends BaseFragment implements
 
         abstract void drawChatBackgroundElements(Canvas canvas);
         abstract void drawChatForegroundElements(Canvas canvas);
+    }
+    
+    // ============ Encrypted Messages Feature ============
+    
+    private ActionBarMenuItem.Item encryptedMessagesMenuItem;
+    
+    private void updateEncryptedMessagesMenuItem() {
+        if (headerItem == null) return;
+        
+        EncryptedMessagesManager encManager = EncryptedMessagesManager.getInstance();
+        boolean isEnabled = encManager.isEncryptionEnabled(dialog_id);
+        
+        String title;
+        if (isEnabled) {
+            title = "🔒 " + LocaleController.getString("EncryptedMessages", R.string.EncryptedMessages);
+        } else {
+            title = LocaleController.getString("EncryptedMessages", R.string.EncryptedMessages);
+        }
+        
+        if (encryptedMessagesMenuItem == null) {
+            encryptedMessagesMenuItem = headerItem.lazilyAddSubItem(encrypted_messages, R.drawable.msg_secret, title);
+        } else {
+            encryptedMessagesMenuItem.text = title;
+        }
+    }
+    
+    private void showEncryptedMessagesDialog() {
+        if (getParentActivity() == null) return;
+        
+        HiddenChatsManager hiddenManager = HiddenChatsManager.getInstance();
+        EncryptedMessagesManager encManager = EncryptedMessagesManager.getInstance();
+        
+        // Check if Protected Zone password is set (required for initial setup only)
+        if (!hiddenManager.hasPassword()) {
+            AlertDialog.Builder builder = new AlertDialog.Builder(getParentActivity());
+            builder.setTitle(LocaleController.getString("Error", R.string.Error));
+            builder.setMessage(LocaleController.getString("NeedProtectedZonePassword", R.string.NeedProtectedZonePassword));
+            builder.setPositiveButton(LocaleController.getString("OK", R.string.OK), null);
+            showDialog(builder.create());
+            return;
+        }
+        
+        // Check if Protected Zone password is cached
+        if (!encManager.isPasswordCached()) {
+            // Show Protected Zone password dialog first (with key icon)
+            showProtectedZonePasswordDialog(() -> {
+                // After successful Protected Zone auth, continue with encrypted messages
+                proceedWithEncryptedMessagesDialog();
+            });
+            return;
+        }
+        
+        // Protected Zone password is cached, proceed directly
+        proceedWithEncryptedMessagesDialog();
+    }
+    
+    /**
+     * Show Protected Zone password dialog with key icon
+     * @param onSuccess callback when password verified successfully
+     */
+    private void showProtectedZonePasswordDialog(Runnable onSuccess) {
+        if (getParentActivity() == null) return;
+        
+        HiddenChatsManager hiddenManager = HiddenChatsManager.getInstance();
+        EncryptedMessagesManager encManager = EncryptedMessagesManager.getInstance();
+        
+        AlertDialog.Builder builder = new AlertDialog.Builder(getParentActivity());
+        // Title with key emoji to distinguish from other password dialogs
+        builder.setTitle("🔑 " + LocaleController.getString("EnterProtectedZonePassword", R.string.EnterProtectedZonePassword));
+        
+        android.widget.LinearLayout layout = new android.widget.LinearLayout(getParentActivity());
+        layout.setOrientation(android.widget.LinearLayout.VERTICAL);
+        layout.setPadding(AndroidUtilities.dp(24), AndroidUtilities.dp(8), AndroidUtilities.dp(24), 0);
+        
+        // Password field
+        final org.telegram.ui.Components.EditTextBoldCursor passwordField = new org.telegram.ui.Components.EditTextBoldCursor(getParentActivity());
+        passwordField.setTextSize(android.util.TypedValue.COMPLEX_UNIT_DIP, 16);
+        passwordField.setHintTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteHintText));
+        passwordField.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText));
+        passwordField.setBackgroundDrawable(Theme.createEditTextDrawable(getParentActivity(), false));
+        passwordField.setMaxLines(1);
+        passwordField.setLines(1);
+        passwordField.setSingleLine(true);
+        passwordField.setInputType(android.text.InputType.TYPE_CLASS_TEXT | android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD);
+        passwordField.setHint(LocaleController.getString("Password", R.string.Password));
+        layout.addView(passwordField, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, 48));
+        
+        builder.setView(layout);
+        
+        builder.setPositiveButton(LocaleController.getString("Enter", R.string.Enter), (dialog, which) -> {
+            String password = passwordField.getText().toString();
+            
+            if (password.isEmpty()) {
+                BulletinFactory.of(this).createErrorBulletin(LocaleController.getString("PasswordCannotBeEmpty", R.string.PasswordCannotBeEmpty)).show();
+                return;
+            }
+            
+            // Verify Protected Zone password
+            if (!hiddenManager.checkPassword(password)) {
+                BulletinFactory.of(this).createErrorBulletin(LocaleController.getString("WrongProtectedZonePassword", R.string.WrongProtectedZonePassword)).show();
+                return;
+            }
+            
+            // Load encrypted messages with Protected Zone password
+            encManager.loadWithPassword(password);
+            
+            // Call success callback
+            if (onSuccess != null) {
+                onSuccess.run();
+            }
+        });
+        
+        builder.setNegativeButton(LocaleController.getString("Cancel", R.string.Cancel), (dialog, which) -> {
+            encManager.setUserDeclinedPassword(true);
+        });
+        
+        showDialog(builder.create());
+    }
+    
+    /**
+     * Check if chat has encrypted messages that need Protected Zone password to decrypt
+     * Called on resume to prompt user for password if needed
+     */
+    private void checkForEncryptedMessagesNeedingPassword() {
+        EncryptedMessagesManager encManager = EncryptedMessagesManager.getInstance();
+        HiddenChatsManager hiddenManager = HiddenChatsManager.getInstance();
+        
+        // Skip if password already cached or user declined
+        if (encManager.isPasswordCached() || encManager.hasUserDeclinedPassword()) {
+            return;
+        }
+        
+        // Skip if no Protected Zone password set
+        if (!hiddenManager.hasPassword()) {
+            return;
+        }
+        
+        // Check if there are encrypted messages in this chat
+        boolean hasEncryptedMessages = false;
+        if (messages != null) {
+            for (int i = 0; i < messages.size() && i < 50; i++) { // Check first 50 messages
+                MessageObject msg = messages.get(i);
+                if (msg != null && msg.messageText != null && 
+                    encManager.isEncryptedMessage(msg.messageText.toString())) {
+                    hasEncryptedMessages = true;
+                    break;
+                }
+            }
+        }
+        
+        if (hasEncryptedMessages) {
+            // Show Protected Zone password dialog (with key icon)
+            showProtectedZonePasswordDialog(() -> {
+                // After password entered, reload chat to decrypt messages properly
+                reloadChatForEncryption();
+            });
+        }
+    }
+    
+    /**
+     * Continue with encrypted messages dialog after Protected Zone is authenticated
+     */
+    private void proceedWithEncryptedMessagesDialog() {
+        EncryptedMessagesManager encManager = EncryptedMessagesManager.getInstance();
+        boolean isEnabled = encManager.isEncryptionEnabled(dialog_id);
+        
+        if (isEnabled) {
+            // Already enabled - show normal dialog
+            showNormalEncryptedMessagesDialog();
+        } else {
+            // Not enabled - need to set chat password
+            showSetEncryptionPasswordDialog();
+        }
+    }
+    
+    private void showNormalEncryptedMessagesDialog() {
+        if (getParentActivity() == null) return;
+        
+        EncryptedMessagesManager encManager = EncryptedMessagesManager.getInstance();
+        boolean isEnabled = encManager.isEncryptionEnabled(dialog_id);
+        
+        AlertDialog.Builder builder = new AlertDialog.Builder(getParentActivity());
+        builder.setTitle(LocaleController.getString("EncryptedMessages", R.string.EncryptedMessages));
+        
+        if (isEnabled) {
+            builder.setMessage(LocaleController.getString("EncryptedMessagesEnabledInfo", R.string.EncryptedMessagesEnabledInfo));
+            builder.setPositiveButton(LocaleController.getString("ChangePassword", R.string.ChangePassword), (dialog, which) -> {
+                showSetEncryptionPasswordDialog();
+            });
+            builder.setNeutralButton(LocaleController.getString("Disable", R.string.Disable), (dialog, which) -> {
+                encManager.disableEncryption(dialog_id);
+                updateEncryptedMessagesMenuItem();
+                // Reload chat to remove lock icons from messages
+                reloadChatForEncryption();
+            });
+            builder.setNegativeButton(LocaleController.getString("Cancel", R.string.Cancel), null);
+        } else {
+            builder.setMessage(LocaleController.getString("EncryptedMessagesDisabledInfo", R.string.EncryptedMessagesDisabledInfo));
+            builder.setPositiveButton(LocaleController.getString("Enable", R.string.Enable), (dialog, which) -> {
+                showSetEncryptionPasswordDialog();
+            });
+            builder.setNegativeButton(LocaleController.getString("Cancel", R.string.Cancel), null);
+        }
+        
+        showDialog(builder.create());
+    }
+    
+    private void showSetEncryptionPasswordDialog() {
+        if (getParentActivity() == null) return;
+        
+        EncryptedMessagesManager encManager = EncryptedMessagesManager.getInstance();
+        boolean isChangingPassword = encManager.isEncryptionEnabled(dialog_id);
+        
+        AlertDialog.Builder builder = new AlertDialog.Builder(getParentActivity());
+        builder.setTitle(LocaleController.getString("SetEncryptionPassword", R.string.SetEncryptionPassword));
+        
+        android.widget.LinearLayout layout = new android.widget.LinearLayout(getParentActivity());
+        layout.setOrientation(android.widget.LinearLayout.VERTICAL);
+        layout.setPadding(AndroidUtilities.dp(24), AndroidUtilities.dp(8), AndroidUtilities.dp(24), 0);
+        
+        // Show warning if changing password
+        if (isChangingPassword) {
+            TextView warningText = new TextView(getParentActivity());
+            warningText.setText(LocaleController.getString("EncryptionPasswordChangeWarning", R.string.EncryptionPasswordChangeWarning));
+            warningText.setTextColor(Theme.getColor(Theme.key_text_RedRegular));
+            warningText.setTextSize(android.util.TypedValue.COMPLEX_UNIT_DIP, 14);
+            warningText.setPadding(0, 0, 0, AndroidUtilities.dp(12));
+            layout.addView(warningText, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
+        }
+        
+        final org.telegram.ui.Components.EditTextBoldCursor passwordField = new org.telegram.ui.Components.EditTextBoldCursor(getParentActivity());
+        passwordField.setTextSize(android.util.TypedValue.COMPLEX_UNIT_DIP, 16);
+        passwordField.setHintTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteHintText));
+        passwordField.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText));
+        passwordField.setBackgroundDrawable(Theme.createEditTextDrawable(getParentActivity(), false));
+        passwordField.setMaxLines(1);
+        passwordField.setLines(1);
+        passwordField.setSingleLine(true);
+        passwordField.setInputType(android.text.InputType.TYPE_CLASS_TEXT | android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD);
+        passwordField.setHint(LocaleController.getString("Password", R.string.Password));
+        layout.addView(passwordField, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, 48));
+        
+        builder.setView(layout);
+        
+        builder.setPositiveButton(LocaleController.getString("Set", R.string.Set), (dialog, which) -> {
+            String password = passwordField.getText().toString();
+            if (password.isEmpty()) {
+                return;
+            }
+            
+            encManager.setChatPassword(dialog_id, password);
+            updateEncryptedMessagesMenuItem();
+            
+            // Reload chat to decrypt existing messages with new password
+            reloadChatForEncryption();
+        });
+        builder.setNegativeButton(LocaleController.getString("Cancel", R.string.Cancel), null);
+        
+        showDialog(builder.create());
+    }
+    
+    public long getDialogIdForEncryption() {
+        return dialog_id;
+    }
+    
+    /**
+     * Reload chat to apply encryption changes (decrypt/encrypt messages)
+     * Replaces current chat with a fresh instance to re-decrypt messages
+     */
+    private void reloadChatForEncryption() {
+        // Save current dialog info
+        final long dialogId = dialog_id;
+        
+        // Create new ChatActivity for same dialog
+        Bundle args = new Bundle();
+        if (DialogObject.isEncryptedDialog(dialogId)) {
+            args.putInt("enc_id", DialogObject.getEncryptedChatId(dialogId));
+        } else if (DialogObject.isUserDialog(dialogId)) {
+            args.putLong("user_id", dialogId);
+        } else {
+            args.putLong("chat_id", -dialogId);
+        }
+        
+        ChatActivity newChat = new ChatActivity(args);
+        
+        // Replace current fragment with new one (true = remove current from stack)
+        presentFragment(newChat, true);
+        
+        // Show notification about encryption enabled
+        AndroidUtilities.runOnUIThread(() -> {
+            BulletinFactory.of(newChat).createSimpleBulletin(R.raw.contact_check, 
+                LocaleController.getString("EncryptionEnabled", R.string.EncryptionEnabled)).show();
+        }, 300);
     }
 }

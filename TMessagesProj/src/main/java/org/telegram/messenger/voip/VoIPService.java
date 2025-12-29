@@ -96,6 +96,7 @@ import org.json.JSONObject;
 import org.telegram.messenger.AccountInstance;
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.ApplicationLoader;
+import org.telegram.messenger.CallSettingsManager;
 import org.telegram.messenger.BuildVars;
 import org.telegram.messenger.ChatObject;
 import org.telegram.messenger.ContactsController;
@@ -3407,7 +3408,9 @@ public class VoIPService extends Service implements SensorEventListener, AudioMa
 			final boolean enableNs = !(sysNsAvailable && serverConfig.useSystemNs);
 			final String logFilePath = BuildVars.DEBUG_VERSION ? VoIPHelper.getLogFilePath("voip" + privateCall.id) : VoIPHelper.getLogFilePath("" + privateCall.id, false);
 			final String statsLogFilePath = VoIPHelper.getLogFilePath("" + privateCall.id, true);
-			final Instance.Config config = new Instance.Config(initializationTimeout, receiveTimeout, voipDataSaving, privateCall.p2p_allowed, enableAec, enableNs, true, false, serverConfig.enableStunMarking, logFilePath, statsLogFilePath, privateCall.protocol.max_layer, privateCall.custom_parameters == null ? "" : privateCall.custom_parameters.data);
+			// Check if P2P should be disabled (force relay-only mode)
+			final boolean p2pAllowed = privateCall.p2p_allowed && !CallSettingsManager.getInstance().isDisableP2P();
+			final Instance.Config config = new Instance.Config(initializationTimeout, receiveTimeout, voipDataSaving, p2pAllowed, enableAec, enableNs, true, false, serverConfig.enableStunMarking, logFilePath, statsLogFilePath, privateCall.protocol.max_layer, privateCall.custom_parameters == null ? "" : privateCall.custom_parameters.data);
 			lastLogFilePath = logFilePath;
 
 			// persistent state
@@ -3416,15 +3419,76 @@ public class VoIPService extends Service implements SensorEventListener, AudioMa
 			// endpoints
 			final boolean forceTcp = preferences.getBoolean("dbg_force_tcp_in_calls", false);
 			final int endpointType = forceTcp ? Instance.ENDPOINT_TYPE_TCP_RELAY : Instance.ENDPOINT_TYPE_UDP_RELAY;
-			final Instance.Endpoint[] endpoints = new Instance.Endpoint[privateCall.connections.size()];
+			
+			// Get custom call settings
+			CallSettingsManager callSettings = CallSettingsManager.getInstance();
+			final boolean forceWebRTC = callSettings.isForceWebRTC();
+			final boolean useTcpForTurn = callSettings.isUseTCP();
+			final boolean replaceStandard = callSettings.isReplaceStandardServers();
+			final java.util.List<CallSettingsManager.TurnServer> customTurnServers = callSettings.getEnabledTurnServers();
+			final boolean hasCustomServers = !customTurnServers.isEmpty();
+			
+			// Build endpoints list
+			ArrayList<Instance.Endpoint> endpointsList = new ArrayList<>();
 			ArrayList<Long> reflectorIds = new ArrayList<>();
-			for (int i = 0; i < endpoints.length; i++) {
-				final TLRPC.PhoneConnection connection = privateCall.connections.get(i);
-				endpoints[i] = new Instance.Endpoint(connection instanceof TLRPC.TL_phoneConnectionWebrtc, connection.id, connection.ip, connection.ipv6, connection.port, endpointType, connection.peer_tag, connection.turn, connection.stun, connection.username, connection.password, connection.tcp);
-				if (connection instanceof TLRPC.TL_phoneConnection) {
-					reflectorIds.add(((TLRPC.TL_phoneConnection) connection).id);
+			
+			// Add standard Telegram servers (unless we're replacing them with custom ones)
+			if (!replaceStandard || !hasCustomServers) {
+				for (int i = 0; i < privateCall.connections.size(); i++) {
+					final TLRPC.PhoneConnection connection = privateCall.connections.get(i);
+					// Skip non-WebRTC connections if WebRTC mode is forced
+					if (forceWebRTC && !(connection instanceof TLRPC.TL_phoneConnectionWebrtc)) {
+						continue;
+					}
+					Instance.Endpoint endpoint = new Instance.Endpoint(
+						connection instanceof TLRPC.TL_phoneConnectionWebrtc, 
+						connection.id, 
+						connection.ip, 
+						connection.ipv6, 
+						connection.port, 
+						endpointType, 
+						connection.peer_tag, 
+						connection.turn, 
+						connection.stun, 
+						connection.username, 
+						connection.password, 
+						useTcpForTurn ? true : connection.tcp
+					);
+					endpointsList.add(endpoint);
+					if (connection instanceof TLRPC.TL_phoneConnection) {
+						reflectorIds.add(((TLRPC.TL_phoneConnection) connection).id);
+					}
 				}
 			}
+			
+			// Add custom TURN/STUN servers
+			if (hasCustomServers) {
+				long customId = 1000000L;
+				for (CallSettingsManager.TurnServer server : customTurnServers) {
+					if (server.isValid()) {
+						boolean isTurn = server.isTurn();
+						boolean isStun = server.isStun();
+						Instance.Endpoint customEndpoint = new Instance.Endpoint(
+							true, // isRtc - WebRTC mode
+							customId++,
+							server.host,
+							"", // ipv6
+							server.port,
+							useTcpForTurn && isTurn ? Instance.ENDPOINT_TYPE_TCP_RELAY : Instance.ENDPOINT_TYPE_UDP_RELAY,
+							null, // peerTag
+							isTurn, // turn
+							isStun, // stun
+							server.username,
+							server.password,
+							useTcpForTurn && isTurn
+						);
+						endpointsList.add(customEndpoint);
+					}
+				}
+			}
+			
+			final Instance.Endpoint[] endpoints = endpointsList.toArray(new Instance.Endpoint[0]);
+			
 			if (!reflectorIds.isEmpty()) {
 				Collections.sort(reflectorIds);
 				HashMap<Long, Integer> reflectorIdMapping = new HashMap<>();
@@ -3435,7 +3499,7 @@ public class VoIPService extends Service implements SensorEventListener, AudioMa
 					endpoints[i].reflectorId = reflectorIdMapping.getOrDefault(endpoints[i].id, 0);
 				}
 			}
-			if (forceTcp) {
+			if (forceTcp || useTcpForTurn) {
 				AndroidUtilities.runOnUIThread(() -> Toast.makeText(VoIPService.this, "This call uses TCP which will degrade its quality.", Toast.LENGTH_SHORT).show());
 			}
 

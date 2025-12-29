@@ -115,6 +115,7 @@ import androidx.recyclerview.widget.LinearLayoutManager;
 import org.telegram.messenger.AccountInstance;
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.AnimationNotificationsLocker;
+import org.telegram.messenger.EncryptedMessagesManager;
 import org.telegram.messenger.ApplicationLoader;
 import org.telegram.messenger.BirthdayController;
 import org.telegram.messenger.BotWebViewVibrationEffect;
@@ -123,6 +124,7 @@ import org.telegram.messenger.ChatObject;
 import org.telegram.messenger.ContactsController;
 import org.telegram.messenger.DialogObject;
 import org.telegram.messenger.Emoji;
+import org.telegram.messenger.EncryptedMessagesManager;
 import org.telegram.messenger.FileLog;
 import org.telegram.messenger.LiteMode;
 import org.telegram.messenger.LocaleController;
@@ -6370,7 +6372,12 @@ public class ChatActivityEnterView extends FrameLayout implements
                         messageEditText.setHintText(getString("ChannelBroadcast", R.string.ChannelBroadcast), animated);
                     }
                 } else {
-                    messageEditText.setHintText(getString(R.string.TypeMessage));
+                    // Check if encryption is active for this chat
+                    String hintText = getString(R.string.TypeMessage);
+                    if (isEncryptionActiveForCurrentChat()) {
+                        hintText = "🔒 " + hintText;
+                    }
+                    messageEditText.setHintText(hintText);
                 }
             }
         }
@@ -7285,7 +7292,23 @@ public class ChatActivityEnterView extends FrameLayout implements
                 if (replyToTopMsg == null && replyingTopMessage != null) {
                     replyToTopMsg = replyingTopMessage;
                 }
-                SendMessagesHelper.SendMessageParams params = SendMessagesHelper.SendMessageParams.of(message[0].toString(), dialog_id, replyingMessageObject, replyToTopMsg, messageWebPage, messageWebPageSearch, entities, null, null, notify, scheduleDate, scheduleRepeatPeriod, sendAnimationData, updateStickersOrder);
+                
+                // Encrypt message if encryption is enabled for this chat
+                String messageText = message[0].toString();
+                EncryptedMessagesManager encManager = EncryptedMessagesManager.getInstance();
+                if (encManager.isEncryptionEnabled(dialog_id)) {
+                    String password = encManager.getChatPassword(dialog_id);
+                    if (password != null) {
+                        String encrypted = encManager.encryptMessage(messageText, password);
+                        if (encrypted != null) {
+                            messageText = encrypted;
+                            // Clear entities for encrypted message
+                            entities = null;
+                        }
+                    }
+                }
+                
+                SendMessagesHelper.SendMessageParams params = SendMessagesHelper.SendMessageParams.of(messageText, dialog_id, replyingMessageObject, replyToTopMsg, messageWebPage, messageWebPageSearch, entities, null, null, notify, scheduleDate, scheduleRepeatPeriod, sendAnimationData, updateStickersOrder);
                 params.quick_reply_shortcut = parentFragment != null ? parentFragment.quickReplyShortcut : null;
                 params.quick_reply_shortcut_id = parentFragment != null ? parentFragment.getQuickReplyId() : 0;
                 params.effect_id = effectId;
@@ -13875,5 +13898,31 @@ public class ChatActivityEnterView extends FrameLayout implements
         }
         updateFieldRight(lastAttachVisible);
         checkSendButton(false);
+    }
+
+    /**
+     * Check if encryption is fully active for current chat (password cached and encryption enabled)
+     */
+    private boolean isEncryptionActiveForCurrentChat() {
+        if (dialog_id == 0) {
+            return false;
+        }
+        EncryptedMessagesManager encManager = EncryptedMessagesManager.getInstance();
+        // Encryption is active only if:
+        // 1. Protected Zone password is cached
+        // 2. Encryption is enabled for this chat
+        // 3. Not in decoy mode
+        return encManager.isPasswordCached() && 
+               encManager.isEncryptionEnabled(dialog_id) && 
+               !encManager.isInDecoyMode();
+    }
+    
+    /**
+     * Force update the hint text (call after password entry)
+     */
+    public void updateHintForEncryption() {
+        if (messageEditText != null) {
+            setFieldText("", false);
+        }
     }
 }
