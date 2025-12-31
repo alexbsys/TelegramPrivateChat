@@ -1998,6 +1998,12 @@ public class SecretChatHelper extends BaseController {
                             getMessagesStorage().putEncryptedChat(chat, user, dialog);
                             getNotificationCenter().postNotificationName(NotificationCenter.dialogsNeedReload);
                             getNotificationCenter().postNotificationName(NotificationCenter.encryptedChatCreated, chat);
+                            
+                            // Check if we should auto-hide this secret chat
+                            if (HiddenChatsManager.getInstance().shouldHideNextSecretChat()) {
+                                long dialogId = DialogObject.makeEncryptedDialogId(chat.id);
+                                HiddenChatsManager.getInstance().addHiddenChat(dialogId);
+                            }
                             Utilities.stageQueue.postRunnable(() -> {
                                 if (!delayedEncryptedChatUpdates.isEmpty()) {
                                     getMessagesController().processUpdateArray(delayedEncryptedChatUpdates, null, null, false, 0);

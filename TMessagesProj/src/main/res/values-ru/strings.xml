@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="AppName">TelegramPrivateChat</string>
-    <string name="AppNameBeta">TelegramPrivateChat Beta</string>
+    <string name="AppName">CryptoGram</string>
+    <string name="AppNameBeta">CryptoGram Beta</string>
     <string name="LanguageName">Русский</string>
     <string name="English">Английский</string>
     <string name="LanguageNameInEnglish">Russian</string>
@@ -269,6 +269,8 @@
     <string name="HiddenChats">Скрытые чаты</string>
     <string name="SetupHiddenChatsPassword">Установка пароля скрытых чатов</string>
     <string name="EnterHiddenChatsPassword">Введите пароль скрытых чатов</string>
+    <string name="EnterProtectedZonePassword">Введите пароль Protected Zone</string>
+    <string name="SetupProtectedZonePassword">Установка пароля Protected Zone</string>
     <string name="HideChat">Скрыть чат</string>
     <string name="UnhideChat">Показать чат</string>
     <string name="SecurityPassword">Защитный пароль</string>
@@ -311,4 +313,82 @@
     <string name="Remove">Удалить</string>
     <string name="Set">Установить</string>
     <string name="Enter">Войти</string>
+    
+    <!-- Encrypted Messages -->
+    <string name="EncryptedMessages">Зашифрованные сообщения</string>
+    <string name="NeedHiddenChatsPassword">Сначала нужно установить пароль скрытых чатов. Перейдите в меню → Дополнительная безопасность.</string>
+    <string name="EnterHiddenPasswordFirst">Сначала введите пароль скрытых чатов через поиск в главном списке чатов.</string>
+    <string name="EncryptedMessagesEnabledInfo">Зашифрованные сообщения включены для этого чата. Все ваши сообщения будут автоматически шифроваться.</string>
+    <string name="EncryptedMessagesDisabledInfo">Включите зашифрованные сообщения для отправки AES-зашифрованных сообщений, которые смогут прочитать только получатели с паролем.</string>
+    <string name="SetEncryptionPassword">Установить пароль шифрования</string>
+    <string name="EncryptionEnabled">Шифрование включено для этого чата</string>
+    <string name="SendEncrypted">Отправить зашифрованное</string>
+    <string name="EncryptionPasswordChangeWarning">⚠️ Внимание: Ранее отправленные сообщения останутся зашифрованными старым паролем и не будут читаться с новым.</string>
+    <string name="ForgetPasswordOnMinimize">Забывать пароль при сворачивании</string>
+    <string name="AskPasswordOnStart">Спрашивать пароль при запуске</string>
+    <string name="AskPasswordDisabled">Отключено</string>
+    <string name="AskPasswordAlways">Всегда</string>
+    <string name="AskPasswordIfEncrypted">Если есть шифр. чаты</string>
+    <string name="AskPasswordIfEncryptedShort">Если есть шифр.</string>
+    <string name="DuplicateDetection">Обнаружение дубликатов</string>
+    <string name="DuplicateDetectionInfo">Количество сообщений для проверки на дубликаты. 0 - отключено. Обнаруживает пересылку ваших зашифрованных сообщений.</string>
+    <string name="Disabled">Отключено</string>
+    <string name="ChatEncryptionPassword">Пароль шифрования чата</string>
+    <string name="NeedProtectedZonePassword">Вам нужно сначала установить пароль Protected Zone. Перейдите в Дополнительную безопасность в меню.</string>
+    <string name="ProtectedZonePassword">Пароль Защищённой зоны</string>
+    <string name="EnterProtectedZonePasswordFirst">Введите пароль Защищённой зоны для доступа к настройкам шифрования сообщений.</string>
+    <string name="ProtectedZonePasswordRequired">Требуется пароль Защищённой зоны</string>
+
+    <!-- Advanced Call Settings -->
+    <string name="AdvancedCallSettings">Настройки звонков</string>
+    <string name="CallSettings">Настройки звонков</string>
+    <string name="ForceWebRTC">Использовать режим WebRTC</string>
+    <string name="UseTCPForTurn">Использовать TCP для TURN</string>
+    <string name="CallSettingsInfo">Включите режим WebRTC для использования стандартных TURN серверов вместо рефлекторов Telegram. Отключите P2P чтобы весь трафик шёл через relay серверы. Это может помочь, если звонки заблокированы в вашем регионе.</string>
+    <string name="ShareCallSettings">Скопировать настройки в буфер</string>
+    <string name="ImportCallSettings">Импорт настроек из буфера обмена</string>
+    <string name="CallSettingsShared">Настройки отправлены</string>
+    <string name="CallSettingsCopied">Настройки скопированы в буфер обмена</string>
+    <string name="CallSettingsApplied">Настройки применены</string>
+    <string name="ClipboardEmpty">Буфер обмена пуст</string>
+    <string name="NoCallSettingsInClipboard">В буфере нет настроек звонков</string>
+    <string name="TapToApplySettings">📋 Скопируйте и импортируйте в настройках звонков</string>
+    <string name="CallServerMode">Режим сервера звонков</string>
+    <string name="UseCallServer">Использовать сервер управления звонками</string>
+    <string name="CallServerUrl">URL сервера</string>
+    <string name="CheckTariff">Проверить тариф</string>
+    <string name="TariffInfo">Информация о тарифе</string>
+    <string name="TariffInfoHint">Нажмите чтобы проверить тариф и остаток минут</string>
+    <string name="CallServerModeInfo">При включении TURN серверы будут получены с сервера управления звонками. Бесплатные пользователи имеют ограниченное время.</string>
+    <string name="CallServerUrlNotSet">Сначала укажите URL сервера</string>
+    <string name="Tariff">Тариф</string>
+    <string name="FreeMinutesRemaining">Осталось бесплатных минут</string>
+    <string name="PeriodEnd">Окончание периода</string>
+    <string name="NotSet">Не задано</string>
+    <string name="CallsCurrentlyUnavailable">Звонки сейчас недоступны</string>
+    <string name="FreeTimeEnded">Бесплатное время закончилось</string>
+    <string name="TimeRemaining">Осталось времени</string>
+    <string name="StartHiddenSecretChat">Скрытый секретный чат</string>
+    <string name="ProtectedZone">Защищённая зона</string>
+    <string name="NeedSetProtectedZonePassword">Сначала установите пароль защищённой зоны. Настройки → Дополнительная безопасность.</string>
+    <string name="HiddenSecretChatCreated">Скрытый секретный чат создан</string>
+    <string name="WrongPassword">Неверный пароль</string>
+    <string name="DisableP2P">Отключить P2P (только relay)</string>
+    <string name="TurnServers">TURN серверы</string>
+    <string name="AddTurnServer">Добавить TURN сервер</string>
+    <string name="EditTurnServer">Редактировать TURN сервер</string>
+    <string name="TurnServerHost">Хост сервера</string>
+    <string name="TurnServerPort">Порт</string>
+    <string name="TurnServerUsername">Имя пользователя</string>
+    <string name="TurnServerPassword">Пароль</string>
+    <string name="ServerType">Тип</string>
+    <string name="TurnServersInfo">Добавьте свои TURN серверы для передачи трафика звонков. Эти серверы будут использоваться при включенном режиме WebRTC.</string>
+    <string name="ReplaceStandardServers">Заменить стандартные серверы</string>
+    <string name="ReplaceStandardWarning">⚠️ ВНИМАНИЕ: Если вы включите эту опцию, стандартные relay-серверы Telegram будут полностью отключены.\n\nЭто означает:\n• Если у другой стороны нет доступа к вашему TURN серверу, звонок МОЖЕТ НЕ УСТАНОВИТЬСЯ\n• Ваш TURN сервер должен быть доступен обеим сторонам\n• Другие пользователи Telegram не видят ваши кастомные серверы\n\nВключайте только если понимаете последствия и протестировали настройку.</string>
+    <string name="ReplaceStandardWarningNoServers">Вам нужно добавить хотя бы один TURN сервер перед включением этой опции.</string>
+    <string name="Warning">Предупреждение</string>
+    <string name="Continue">Продолжить</string>
+    <string name="ChatPasswordRequired">Требуется пароль шифрования чата</string>
+    <string name="WrongProtectedZonePassword">Неверный пароль Защищённой зоны</string>
+    <string name="RemovedMessage">Удалённое сообщение</string>
 </resources>

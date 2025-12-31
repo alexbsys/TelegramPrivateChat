@@ -69,6 +69,7 @@ import android.view.WindowManager;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
+import android.widget.EditText;
 import android.widget.RelativeLayout;
 import android.widget.Toast;
 import android.window.BackEvent;
@@ -114,6 +115,7 @@ import org.telegram.messenger.FileLoader;
 import org.telegram.messenger.FileLog;
 import org.telegram.messenger.FingerprintController;
 import org.telegram.messenger.FlagSecureReason;
+import org.telegram.messenger.EncryptedMessagesManager;
 import org.telegram.messenger.GenericProvider;
 import org.telegram.messenger.HiddenChatsManager;
 import org.telegram.messenger.GiftAuctionController;
@@ -728,6 +730,10 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
                     // Hidden Chats Password
                     drawerLayoutContainer.closeDrawer(true);
                     openHiddenChatsWithPassword();
+                } else if (id == 19) {
+                    // Advanced Call Settings
+                    drawerLayoutContainer.closeDrawer(true);
+                    presentFragment(new AdvancedCallSettingsActivity());
                 }
             }
         });
@@ -1579,7 +1585,7 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
     private void showEnterHiddenChatsPasswordDialog() {
         Context context = this;
         AlertDialog.Builder builder = new AlertDialog.Builder(context);
-        builder.setTitle(LocaleController.getString("EnterHiddenChatsPassword", R.string.EnterHiddenChatsPassword));
+        builder.setTitle(LocaleController.getString("EnterProtectedZonePassword", R.string.EnterProtectedZonePassword));
 
         android.widget.LinearLayout layout = new android.widget.LinearLayout(context);
         layout.setOrientation(android.widget.LinearLayout.VERTICAL);
@@ -7095,6 +7101,11 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
         NotificationCenter.getGlobalInstance().postNotificationName(NotificationCenter.stopAllHeavyOperations, 4096);
         ApplicationLoader.mainInterfacePaused = true;
         
+        // Clear encrypted messages password cache for security (if setting enabled)
+        if (HiddenChatsManager.getInstance().isForgetPasswordOnMinimize()) {
+            EncryptedMessagesManager.getInstance().clearPasswordCache();
+        }
+        
         // Exit hidden chats mode and close hidden chat when app is paused
         HiddenChatsManager hiddenManager = HiddenChatsManager.getInstance();
         if (hiddenManager.isHiddenChatsMode()) {
@@ -7164,6 +7175,71 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
         if (GroupCallActivity.groupCallInstance != null) {
             GroupCallActivity.groupCallInstance.onResume();
         }
+        
+        // Check if we need to ask for Protected Zone password on start
+        checkProtectedZonePasswordOnStart();
+    }
+    
+    private void checkProtectedZonePasswordOnStart() {
+        HiddenChatsManager hiddenManager = HiddenChatsManager.getInstance();
+        EncryptedMessagesManager encManager = EncryptedMessagesManager.getInstance();
+        
+        // Only ask if:
+        // 1. Setting mode requires it (shouldAskPasswordOnStart checks mode and encrypted chats flag)
+        // 2. Protected Zone password is set
+        // 3. Password is not already cached
+        if (hiddenManager.shouldAskPasswordOnStart() && 
+            hiddenManager.hasPassword() && 
+            !encManager.isPasswordCached()) {
+            
+            // Show password dialog
+            showProtectedZonePasswordOnStartDialog();
+        }
+    }
+    
+    private void showProtectedZonePasswordOnStartDialog() {
+        if (this.isFinishing()) {
+            return;
+        }
+        
+        AlertDialog.Builder builder = new AlertDialog.Builder(this);
+        builder.setTitle("🔑 " + LocaleController.getString("EnterProtectedZonePassword", R.string.EnterProtectedZonePassword));
+        
+        final EditText passwordInput = new EditText(this);
+        passwordInput.setHint(LocaleController.getString("ProtectedZonePassword", R.string.ProtectedZonePassword));
+        passwordInput.setInputType(android.text.InputType.TYPE_CLASS_TEXT | android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD);
+        passwordInput.setSingleLine(true);
+        
+        FrameLayout container = new FrameLayout(this);
+        FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.MATCH_PARENT,
+            FrameLayout.LayoutParams.WRAP_CONTENT
+        );
+        params.leftMargin = AndroidUtilities.dp(24);
+        params.rightMargin = AndroidUtilities.dp(24);
+        params.topMargin = AndroidUtilities.dp(8);
+        passwordInput.setLayoutParams(params);
+        container.addView(passwordInput);
+        
+        builder.setView(container);
+        
+        builder.setPositiveButton(LocaleController.getString("Enter", R.string.Enter), (dialog, which) -> {
+            String password = passwordInput.getText().toString();
+            if (HiddenChatsManager.getInstance().checkPasswordWithDecoy(password)) {
+                // Load encrypted messages manager with password
+                EncryptedMessagesManager.getInstance().loadWithPassword(password);
+            }
+        });
+        
+        builder.setNegativeButton(LocaleController.getString("Cancel", R.string.Cancel), null);
+        
+        AlertDialog dialog = builder.show();
+        
+        // Focus on password field
+        passwordInput.requestFocus();
+        AndroidUtilities.runOnUIThread(() -> {
+            AndroidUtilities.showKeyboard(passwordInput);
+        }, 200);
     }
 
     @Override

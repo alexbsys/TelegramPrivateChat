@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="AppName">TelegramPrivateChat</string>
-    <string name="AppNameBeta">TelegramPrivateChat Beta</string>
+    <string name="AppName">CryptoGram</string>
+    <string name="AppNameBeta">CryptoGram Beta</string>
     <string name="LanguageName">English</string>
     <string name="English">English</string>
     <string name="LanguageNameInEnglish">English</string>
@@ -10198,6 +10198,8 @@
     <string name="HiddenChats">Hidden Chats</string>
     <string name="SetupHiddenChatsPassword">Setup Hidden Chats Password</string>
     <string name="EnterHiddenChatsPassword">Enter Hidden Chats Password</string>
+    <string name="EnterProtectedZonePassword">Enter Protected Zone Password</string>
+    <string name="SetupProtectedZonePassword">Setup Protected Zone Password</string>
     <string name="HideChat">Hide Chat</string>
     <string name="UnhideChat">Unhide Chat</string>
     <string name="SecurityPassword">Security Password</string>
@@ -10236,4 +10238,80 @@
     <string name="SecurityPasswordRemoved">Security password has been removed.</string>
     <string name="Removed">Removed</string>
     <string name="Enter">Enter</string>
+    
+    <!-- Encrypted Messages -->
+    <string name="EncryptedMessages">Encrypted Messages</string>
+    <string name="NeedHiddenChatsPassword">You need to set up a hidden chats password first. Go to menu → Advanced Safety Control.</string>
+    <string name="EnterHiddenPasswordFirst">Please enter your hidden chats password first by searching for it in the main chat list.</string>
+    <string name="EncryptedMessagesEnabledInfo">Encrypted messages are enabled for this chat. You can send encrypted messages using the lock button.</string>
+    <string name="EncryptedMessagesDisabledInfo">Enable encrypted messages to send AES-encrypted messages that only recipients with the password can read.</string>
+    <string name="SetEncryptionPassword">Set Encryption Password</string>
+    <string name="EncryptionEnabled">Encryption enabled for this chat</string>
+    <string name="SendEncrypted">Send Encrypted</string>
+    <string name="EncryptionPasswordChangeWarning">⚠️ Warning: Previously sent messages will remain encrypted with the old password and won\'t be readable with the new one.</string>
+    <string name="ForgetPasswordOnMinimize">Forget password on minimize</string>
+    <string name="AskPasswordOnStart">Ask password on app start</string>
+    <string name="AskPasswordDisabled">Disabled</string>
+    <string name="AskPasswordAlways">Always</string>
+    <string name="AskPasswordIfEncrypted">If encrypted chats exist</string>
+    <string name="AskPasswordIfEncryptedShort">If encrypted</string>
+    <string name="DuplicateDetection">Duplicate message detection</string>
+    <string name="DuplicateDetectionInfo">Number of recent messages to check for duplicates. Set to 0 to disable. Detects when someone resends your encrypted message.</string>
+    <string name="Disabled">Disabled</string>
+    <string name="ProtectedZonePassword">Protected Zone Password</string>
+    <string name="NeedProtectedZonePassword">You need to set a Protected Zone password first. Go to Advanced Safety Control in the menu.</string>
+    <string name="ChatEncryptionPassword">Chat Encryption Password</string>
+    <string name="EnterProtectedZonePasswordFirst">Enter your Protected Zone password to access encrypted messages settings.</string>
+    <string name="ProtectedZonePasswordRequired">Protected Zone password is required</string>
+
+    <!-- Advanced Call Settings -->
+    <string name="AdvancedCallSettings">Advanced Call Settings</string>
+    <string name="CallSettings">Call Settings</string>
+    <string name="ForceWebRTC">Force WebRTC mode</string>
+    <string name="UseTCPForTurn">Use TCP for TURN</string>
+    <string name="CallSettingsInfo">Enable WebRTC mode to use standard TURN servers instead of Telegram reflectors. Disable P2P to force all traffic through relay servers. This may help if calls are blocked in your region.</string>
+    <string name="ShareCallSettings">Copy settings to clipboard</string>
+    <string name="ImportCallSettings">Import settings from clipboard</string>
+    <string name="CallSettingsShared">Settings sent</string>
+    <string name="CallSettingsCopied">Settings copied to clipboard</string>
+    <string name="CallSettingsApplied">Settings applied</string>
+    <string name="ClipboardEmpty">Clipboard is empty</string>
+    <string name="NoCallSettingsInClipboard">No call settings found in clipboard</string>
+    <string name="TapToApplySettings">📋 Copy this message and import in Advanced Call Settings</string>
+    <string name="CallServerMode">Call Server Mode</string>
+    <string name="UseCallServer">Use call manager server</string>
+    <string name="CallServerUrl">Server URL</string>
+    <string name="CheckTariff">Check tariff</string>
+    <string name="TariffInfo">Tariff Information</string>
+    <string name="TariffInfoHint">Tap to check your current tariff and remaining minutes</string>
+    <string name="CallServerModeInfo">When enabled, TURN servers will be fetched from the call manager server. Free users have limited daily minutes.</string>
+    <string name="CallServerUrlNotSet">Please set the call server URL first</string>
+    <string name="Tariff">Tariff</string>
+    <string name="FreeMinutesRemaining">Free minutes remaining</string>
+    <string name="PeriodEnd">Period ends</string>
+    <string name="NotSet">Not set</string>
+    <string name="CallsCurrentlyUnavailable">Calls are currently unavailable</string>
+    <string name="FreeTimeEnded">Free call time ended</string>
+    <string name="TimeRemaining">Time remaining</string>
+    <string name="StartHiddenSecretChat">Start Hidden Secret Chat</string>
+    <string name="ProtectedZone">Protected Zone</string>
+    <string name="NeedSetProtectedZonePassword">You need to set a Protected Zone password first. Go to Settings → Advanced Safety Control.</string>
+    <string name="HiddenSecretChatCreated">Hidden secret chat created</string>
+    <string name="WrongPassword">Wrong password</string>
+    <string name="DisableP2P">Disable P2P (relay only)</string>
+    <string name="TurnServers">TURN Servers</string>
+    <string name="AddTurnServer">Add TURN Server</string>
+    <string name="EditTurnServer">Edit TURN Server</string>
+    <string name="TurnServerHost">Server host</string>
+    <string name="TurnServerPort">Port</string>
+    <string name="TurnServerUsername">Username</string>
+    <string name="TurnServerPassword">Password</string>
+    <string name="ServerType">Type</string>
+    <string name="TurnServersInfo">Add your own TURN servers to relay call traffic. These servers will be used when WebRTC mode is enabled.</string>
+    <string name="ReplaceStandardServers">Replace standard servers</string>
+    <string name="ReplaceStandardWarning">⚠️ WARNING: If you enable this option, Telegram\'s standard relay servers will be completely disabled.\n\nThis means:\n• If the other party doesn\'t have access to your TURN server, the call MAY NOT CONNECT\n• Your TURN server must be accessible to both parties\n• Other Telegram users cannot see your custom servers\n\nOnly enable this if you understand the implications and have tested your setup.</string>
+    <string name="ReplaceStandardWarningNoServers">You need to add at least one TURN server before enabling this option.</string>
+    <string name="ChatPasswordRequired">Chat encryption password is required</string>
+    <string name="WrongProtectedZonePassword">Wrong Protected Zone password</string>
+    <string name="RemovedMessage">Removed message</string>
 </resources>

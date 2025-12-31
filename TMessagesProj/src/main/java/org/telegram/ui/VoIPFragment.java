@@ -181,6 +181,8 @@ public class VoIPFragment implements
     private TextView callingUserTitle;
 
     private VoIPStatusTextView statusTextView;
+    private TextView tariffInfoView;
+    private Runnable tariffTimerRunnable;
     private ConferenceParticipantsView participantsView;
     private ImageView backIcon;
     private ImageView addIcon;
@@ -554,6 +556,7 @@ public class VoIPFragment implements
     }
 
     private void destroy() {
+        stopTariffTimer();
         if (VoIPService.getSharedInstance() != null) {
             VoIPService.getSharedInstance().unregisterStateListener(this);
         }
@@ -1059,6 +1062,15 @@ public class VoIPFragment implements
         statusTextView = new VoIPStatusTextView(context, backgroundProvider);
         ViewCompat.setImportantForAccessibility(statusTextView, ViewCompat.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS);
         statusLayout.addView(statusTextView, LayoutHelper.createLinear(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT, Gravity.CENTER_HORIZONTAL, 0, 0, 0, 6));
+        
+        // Tariff info view
+        tariffInfoView = new TextView(context);
+        tariffInfoView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 14);
+        tariffInfoView.setTextColor(Color.WHITE);
+        tariffInfoView.setGravity(Gravity.CENTER_HORIZONTAL);
+        tariffInfoView.setAlpha(0.7f);
+        tariffInfoView.setVisibility(View.GONE);
+        statusLayout.addView(tariffInfoView, LayoutHelper.createLinear(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT, Gravity.CENTER_HORIZONTAL, 0, 0, 0, 6));
 
         if (state != null && state.getUser() != null && state.isConference() && state.getGroupCall() != null) {
             participantsView = new ConferenceParticipantsView(context);
@@ -1863,6 +1875,8 @@ public class VoIPFragment implements
                 } else {
                     wasEstablished = true;
                     showTimer = true;
+                    // Start tariff timer for outgoing calls
+                    startTariffTimer();
                 }
                 break;
             case VoIPService.STATE_ENDED:
@@ -3101,6 +3115,100 @@ public class VoIPFragment implements
                 .show();
         dlg.setCanceledOnTouchOutside(true);
         dlg.setOnDismissListener(dialog -> windowView.finish());
+    }
+    
+    private long tariffTimerStartTime = 0;
+    private double tariffInitialMinutes = -1;
+    private boolean tariffWarningShown = false;
+    
+    private void startTariffTimer() {
+        VoIPService service = VoIPService.getSharedInstance();
+        if (service == null) return;
+        
+        // Only show for outgoing calls with FREE tariff
+        if (!service.shouldShowFreeTimer()) {
+            // Check if we should show period end date
+            if (service.shouldShowPeriodEnd()) {
+                if (tariffInfoView != null) {
+                    String periodEnd = service.getPeriodEnd();
+                    tariffInfoView.setText(LocaleController.getString("PeriodEnd", R.string.PeriodEnd) + ": " + periodEnd);
+                    tariffInfoView.setVisibility(View.VISIBLE);
+                }
+            }
+            return;
+        }
+        
+        tariffInitialMinutes = service.getFreeMinutesRemaining();
+        tariffTimerStartTime = System.currentTimeMillis();
+        tariffWarningShown = false;
+        
+        if (tariffInfoView != null) {
+            tariffInfoView.setVisibility(View.VISIBLE);
+        }
+        
+        // Start timer update runnable
+        if (tariffTimerRunnable != null) {
+            AndroidUtilities.cancelRunOnUIThread(tariffTimerRunnable);
+        }
+        
+        tariffTimerRunnable = new Runnable() {
+            @Override
+            public void run() {
+                updateTariffTimer();
+                AndroidUtilities.runOnUIThread(this, 1000);
+            }
+        };
+        AndroidUtilities.runOnUIThread(tariffTimerRunnable, 1000);
+    }
+    
+    private void updateTariffTimer() {
+        VoIPService service = VoIPService.getSharedInstance();
+        if (service == null || tariffInfoView == null || tariffInitialMinutes < 0) {
+            return;
+        }
+        
+        // Calculate remaining time
+        long elapsedMs = System.currentTimeMillis() - tariffTimerStartTime;
+        double elapsedMinutes = elapsedMs / 60000.0;
+        double remainingMinutes = tariffInitialMinutes - elapsedMinutes;
+        
+        if (remainingMinutes <= 0) {
+            // Time ended - terminate call after 10 seconds from first zero
+            if (!tariffWarningShown) {
+                tariffWarningShown = true;
+                tariffInfoView.setText("⚠️ " + LocaleController.getString("FreeTimeEnded", R.string.FreeTimeEnded));
+                tariffInfoView.setTextColor(Color.RED);
+                
+                // Schedule call termination in 10 seconds
+                AndroidUtilities.runOnUIThread(() -> {
+                    VoIPService svc = VoIPService.getSharedInstance();
+                    if (svc != null) {
+                        svc.hangUp();
+                    }
+                }, 10000);
+            }
+            return;
+        }
+        
+        // Show warning at 10 seconds
+        int remainingSeconds = (int) (remainingMinutes * 60);
+        if (remainingSeconds <= 10 && !tariffWarningShown) {
+            tariffWarningShown = true;
+            tariffInfoView.setTextColor(Color.YELLOW);
+        }
+        
+        // Format remaining time
+        int minutes = remainingSeconds / 60;
+        int seconds = remainingSeconds % 60;
+        String timeStr = String.format("%d:%02d", minutes, seconds);
+        tariffInfoView.setText(LocaleController.getString("TimeRemaining", R.string.TimeRemaining) + ": " + timeStr);
+    }
+    
+    private void stopTariffTimer() {
+        if (tariffTimerRunnable != null) {
+            AndroidUtilities.cancelRunOnUIThread(tariffTimerRunnable);
+            tariffTimerRunnable = null;
+        }
     }
 
     @SuppressLint("InlinedApi")

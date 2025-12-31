@@ -181,6 +181,7 @@ public class MessageObject {
     public CharSequence messageText;
     public CharSequence messageTextShort;
     public CharSequence messageTextForReply;
+    public boolean isDecryptedMessage; // Flag for successfully decrypted encrypted messages
     public CharSequence linkDescription;
     public CharSequence caption;
     public CharSequence youtubeDescription;
@@ -5690,6 +5691,55 @@ public class MessageObject {
 
         if (messageText == null) {
             messageText = "";
+        }
+        
+        // Try to decrypt encrypted messages
+        if (messageText != null && EncryptedMessagesManager.getInstance().isEncryptedMessage(messageText.toString())) {
+            long dialogId = getDialogId();
+            EncryptedMessagesManager encManager = EncryptedMessagesManager.getInstance();
+            String originalEncrypted = messageText.toString();
+            int msgId = messageOwner != null ? messageOwner.id : 0;
+            
+            // In decoy mode, show encrypted messages as "Removed message"
+            if (encManager.isInDecoyMode()) {
+                messageText = LocaleController.getString("RemovedMessage", R.string.RemovedMessage);
+                return;
+            }
+            
+            // If Protected Zone password is not cached, leave message encrypted
+            if (!encManager.isPasswordCached()) {
+                // Message stays as encrypted text - user needs to enter Protected Zone password
+                return;
+            }
+            
+            // Register this encrypted message for duplicate detection
+            encManager.registerEncryptedMessage(dialogId, originalEncrypted, msgId);
+            
+            if (encManager.isEncryptionEnabled(dialogId)) {
+                String password = encManager.getChatPassword(dialogId);
+                if (password != null) {
+                    String decrypted = encManager.decryptMessage(originalEncrypted, password);
+                    if (decrypted != null) {
+                        // Check if this is a duplicate (same encrypted text from different message)
+                        boolean isDuplicate = encManager.isDuplicateEncryptedMessage(dialogId, originalEncrypted, msgId);
+                        if (isDuplicate) {
+                            // Show warning emoji for potential forwarded/copied message
+                            messageText = "⚠️🔓 " + decrypted;
+                        } else {
+                            messageText = "🔓 " + decrypted;
+                        }
+                        isDecryptedMessage = true;
+                    }
+                }
+            }
+        }
+        
+        // Display call settings messages with formatted summary
+        if (messageText != null && CallSettingsManager.isCallSettingsMessage(messageText.toString())) {
+            String summary = CallSettingsManager.getSettingsSummary(messageText.toString());
+            if (summary != null) {
+                messageText = summary + "\n\n" + LocaleController.getString("TapToApplySettings", R.string.TapToApplySettings);
+            }
         }
 
         isEmbedVideoCached = null;

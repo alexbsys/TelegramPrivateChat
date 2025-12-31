@@ -341,6 +341,7 @@ public class DrawerLayoutAdapter extends RecyclerListView.SelectionAdapter {
         items.add(new Item(11, LocaleController.getString(R.string.SavedMessages), savedIcon));
         items.add(new Item(8, LocaleController.getString(R.string.Settings), settingsIcon));
         items.add(new Item(18, LocaleController.getString("AdvancedSafetyControl", R.string.AdvancedSafetyControl), R.drawable.msg_secret));
+        items.add(new Item(19, LocaleController.getString("AdvancedCallSettings", R.string.AdvancedCallSettings), R.drawable.msg_calls));
         items.add(null); // divider
         items.add(new Item(7, LocaleController.getString(R.string.InviteFriends), inviteIcon));
         items.add(new Item(13, LocaleController.getString(R.string.TelegramFeatures), helpIcon));

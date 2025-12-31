@@ -23,6 +23,7 @@ import androidx.recyclerview.widget.RecyclerView;
 
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.DialogObject;
+import org.telegram.messenger.EncryptedMessagesManager;
 import org.telegram.messenger.HiddenChatsManager;
 import org.telegram.messenger.LocaleController;
 import org.telegram.messenger.R;
@@ -51,6 +52,9 @@ public class HiddenChatsActivity extends BaseFragment {
     private int unhideChatsRow;
     private int changePasswordRow;
     private int decoyPasswordRow;
+    private int forgetPasswordRow;
+    private int askPasswordOnStartRow;
+    private int duplicateDetectionRow;
     private int sectionRow;
     private int hiddenChatsHeaderRow;
     private int hiddenChatsStartRow;
@@ -76,6 +80,9 @@ public class HiddenChatsActivity extends BaseFragment {
         unhideChatsRow = rowCount++;
         changePasswordRow = rowCount++;
         decoyPasswordRow = rowCount++;
+        forgetPasswordRow = rowCount++;
+        askPasswordOnStartRow = rowCount++;
+        duplicateDetectionRow = rowCount++;
         sectionRow = rowCount++;
         
         if (!hiddenChatsList.isEmpty()) {
@@ -124,6 +131,12 @@ public class HiddenChatsActivity extends BaseFragment {
                 showChangePasswordDialog();
             } else if (position == decoyPasswordRow) {
                 showDecoyPasswordDialog();
+            } else if (position == forgetPasswordRow) {
+                toggleForgetPasswordSetting();
+            } else if (position == askPasswordOnStartRow) {
+                showAskPasswordModeDialog();
+            } else if (position == duplicateDetectionRow) {
+                showDuplicateDetectionDialog();
             } else if (position >= hiddenChatsStartRow && position < hiddenChatsEndRow) {
                 // Click on hidden chat - show option to unhide
                 int index = position - hiddenChatsStartRow;
@@ -522,6 +535,87 @@ public class HiddenChatsActivity extends BaseFragment {
         builder.setNegativeButton(LocaleController.getString("Cancel", R.string.Cancel), null);
         showDialog(builder.create());
     }
+    
+    private void toggleForgetPasswordSetting() {
+        HiddenChatsManager manager = HiddenChatsManager.getInstance();
+        boolean currentValue = manager.isForgetPasswordOnMinimize();
+        manager.setForgetPasswordOnMinimize(!currentValue);
+        
+        if (listAdapter != null) {
+            listAdapter.notifyDataSetChanged();
+        }
+    }
+    
+    private void showAskPasswordModeDialog() {
+        Context context = getParentActivity();
+        if (context == null) return;
+        
+        String[] items = new String[]{
+            LocaleController.getString("AskPasswordDisabled", R.string.AskPasswordDisabled),
+            LocaleController.getString("AskPasswordAlways", R.string.AskPasswordAlways),
+            LocaleController.getString("AskPasswordIfEncrypted", R.string.AskPasswordIfEncrypted)
+        };
+        
+        int currentMode = HiddenChatsManager.getInstance().getAskPasswordOnStartMode();
+        
+        AlertDialog.Builder builder = new AlertDialog.Builder(context);
+        builder.setTitle(LocaleController.getString("AskPasswordOnStart", R.string.AskPasswordOnStart));
+        builder.setItems(items, (dialog, which) -> {
+            HiddenChatsManager.getInstance().setAskPasswordOnStartMode(which);
+            if (listAdapter != null) {
+                listAdapter.notifyDataSetChanged();
+            }
+        });
+        builder.setNegativeButton(LocaleController.getString("Cancel", R.string.Cancel), null);
+        builder.show();
+    }
+    
+    private void showDuplicateDetectionDialog() {
+        Context context = getParentActivity();
+        if (context == null) return;
+        
+        EncryptedMessagesManager encManager = EncryptedMessagesManager.getInstance();
+        int currentCount = encManager.getDuplicateDetectionCount();
+        
+        AlertDialog.Builder builder = new AlertDialog.Builder(context);
+        builder.setTitle(LocaleController.getString("DuplicateDetection", R.string.DuplicateDetection));
+        
+        // Create input field
+        final android.widget.EditText input = new android.widget.EditText(context);
+        input.setInputType(android.text.InputType.TYPE_CLASS_NUMBER);
+        input.setHint("0 = " + LocaleController.getString("Disabled", R.string.Disabled));
+        input.setText(String.valueOf(currentCount));
+        input.setSelection(input.getText().length());
+        
+        android.widget.FrameLayout container = new android.widget.FrameLayout(context);
+        android.widget.FrameLayout.LayoutParams params = new android.widget.FrameLayout.LayoutParams(
+            android.widget.FrameLayout.LayoutParams.MATCH_PARENT,
+            android.widget.FrameLayout.LayoutParams.WRAP_CONTENT
+        );
+        params.leftMargin = AndroidUtilities.dp(24);
+        params.rightMargin = AndroidUtilities.dp(24);
+        params.topMargin = AndroidUtilities.dp(8);
+        input.setLayoutParams(params);
+        container.addView(input);
+        
+        builder.setView(container);
+        builder.setMessage(LocaleController.getString("DuplicateDetectionInfo", R.string.DuplicateDetectionInfo));
+        
+        builder.setPositiveButton(LocaleController.getString("Save", R.string.Save), (dialog, which) -> {
+            try {
+                int count = Integer.parseInt(input.getText().toString().trim());
+                if (count < 0) count = 0;
+                encManager.setDuplicateDetectionCount(count);
+                if (listAdapter != null) {
+                    listAdapter.notifyDataSetChanged();
+                }
+            } catch (NumberFormatException e) {
+                // Invalid input, ignore
+            }
+        });
+        builder.setNegativeButton(LocaleController.getString("Cancel", R.string.Cancel), null);
+        builder.show();
+    }
 
     private class ListAdapter extends RecyclerListView.SelectionAdapter {
         private Context mContext;
@@ -581,7 +675,32 @@ public class HiddenChatsActivity extends BaseFragment {
                         String status = HiddenChatsManager.getInstance().hasDecoyPassword() 
                             ? " (" + LocaleController.getString("SecurityPasswordSet", R.string.SecurityPasswordSet) + ")" 
                             : " (" + LocaleController.getString("SecurityPasswordNotSet", R.string.SecurityPasswordNotSet) + ")";
-                        textCell.setTextAndIcon(LocaleController.getString("SecurityPassword", R.string.SecurityPassword) + status, R.drawable.msg_secret, false);
+                        textCell.setTextAndIcon(LocaleController.getString("SecurityPassword", R.string.SecurityPassword) + status, R.drawable.msg_secret, true);
+                    } else if (position == forgetPasswordRow) {
+                        boolean isEnabled = HiddenChatsManager.getInstance().isForgetPasswordOnMinimize();
+                        String status = isEnabled 
+                            ? " (" + LocaleController.getString("NotificationsOn", R.string.NotificationsOn) + ")" 
+                            : " (" + LocaleController.getString("NotificationsOff", R.string.NotificationsOff) + ")";
+                        textCell.setTextAndIcon(LocaleController.getString("ForgetPasswordOnMinimize", R.string.ForgetPasswordOnMinimize) + status, R.drawable.msg_autodelete, true);
+                    } else if (position == askPasswordOnStartRow) {
+                        int mode = HiddenChatsManager.getInstance().getAskPasswordOnStartMode();
+                        String status;
+                        switch (mode) {
+                            case HiddenChatsManager.ASK_PASSWORD_ALWAYS:
+                                status = LocaleController.getString("AskPasswordAlways", R.string.AskPasswordAlways);
+                                break;
+                            case HiddenChatsManager.ASK_PASSWORD_IF_ENCRYPTED_CHATS:
+                                status = LocaleController.getString("AskPasswordIfEncryptedShort", R.string.AskPasswordIfEncryptedShort);
+                                break;
+                            default:
+                                status = LocaleController.getString("AskPasswordDisabled", R.string.AskPasswordDisabled);
+                                break;
+                        }
+                        textCell.setTextAndValue(LocaleController.getString("AskPasswordOnStart", R.string.AskPasswordOnStart), status, true);
+                    } else if (position == duplicateDetectionRow) {
+                        int count = EncryptedMessagesManager.getInstance().getDuplicateDetectionCount();
+                        String status = count > 0 ? String.valueOf(count) : LocaleController.getString("Disabled", R.string.Disabled);
+                        textCell.setTextAndValue(LocaleController.getString("DuplicateDetection", R.string.DuplicateDetection), status, false);
                     }
                     break;
                 }
@@ -640,7 +759,7 @@ public class HiddenChatsActivity extends BaseFragment {
 
         @Override
         public int getItemViewType(int position) {
-            if (position == hideChatsRow || position == unhideChatsRow || position == changePasswordRow || position == decoyPasswordRow) {
+            if (position == hideChatsRow || position == unhideChatsRow || position == changePasswordRow || position == decoyPasswordRow || position == forgetPasswordRow || position == askPasswordOnStartRow || position == duplicateDetectionRow) {
                 return 0;
             } else if (position == sectionRow || position == hiddenChatsInfoRow) {
                 return 1;

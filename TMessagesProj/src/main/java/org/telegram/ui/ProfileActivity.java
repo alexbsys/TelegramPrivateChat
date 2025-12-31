@@ -147,6 +147,7 @@ import org.telegram.messenger.Emoji;
 import org.telegram.messenger.FileLoader;
 import org.telegram.messenger.FileLog;
 import org.telegram.messenger.FlagSecureReason;
+import org.telegram.messenger.HiddenChatsManager;
 import org.telegram.messenger.ImageLoader;
 import org.telegram.messenger.ImageLocation;
 import org.telegram.messenger.ImageReceiver;
@@ -572,6 +573,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
     private final static int add_member = 18;
     private final static int statistics = 19;
     private final static int start_secret_chat = 20;
+    private final static int start_hidden_secret_chat = 45;
     private final static int gallery_menu_save = 21;
     private final static int view_discussion = 22;
     private final static int delete_topic = 23;
@@ -2709,6 +2711,8 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                     });
                     builder.setNegativeButton(LocaleController.getString(R.string.Cancel), null);
                     showDialog(builder.create());
+                } else if (id == start_hidden_secret_chat) {
+                    startHiddenSecretChat();
                 } else if (id == bot_privacy) {
                     BotWebViewAttachedSheet.openPrivacy(currentAccount, userId);
                 } else if (id == gallery_menu_save) {
@@ -12140,6 +12144,8 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
                     }
                     otherItem.addSubItem(start_secret_chat, R.drawable.msg_secret, LocaleController.getString(R.string.StartEncryptedChat));
                     otherItem.setSubItemShown(start_secret_chat, DialogObject.isEmpty(getMessagesController().isUserContactBlocked(userId)));
+                    otherItem.addSubItem(start_hidden_secret_chat, R.drawable.msg_secret, LocaleController.getString(R.string.StartHiddenSecretChat));
+                    otherItem.setSubItemShown(start_hidden_secret_chat, DialogObject.isEmpty(getMessagesController().isUserContactBlocked(userId)));
                 }
                 if (!isBot && getContactsController().contactsDict.get(userId) != null) {
                     otherItem.addSubItem(add_shortcut, R.drawable.msg_home, LocaleController.getString(R.string.AddShortcut));
@@ -16652,5 +16658,87 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
         span.setColor(color);
         spannableStringBuilder.setSpan(span, 0, spannableStringBuilder.length(), 0);
         return spannableStringBuilder;
+    }
+    
+    private void startHiddenSecretChat() {
+        if (getParentActivity() == null) {
+            return;
+        }
+        
+        HiddenChatsManager hiddenManager = HiddenChatsManager.getInstance();
+        
+        // Check if Protected Zone password is set
+        if (!hiddenManager.hasPassword()) {
+            AlertDialog.Builder builder = new AlertDialog.Builder(getParentActivity(), resourcesProvider);
+            builder.setTitle(LocaleController.getString(R.string.ProtectedZone));
+            builder.setMessage(LocaleController.getString(R.string.NeedSetProtectedZonePassword));
+            builder.setPositiveButton(LocaleController.getString(R.string.OK), null);
+            showDialog(builder.create());
+            return;
+        }
+        
+        // Ask for Protected Zone password
+        AlertDialog.Builder builder = new AlertDialog.Builder(getParentActivity(), resourcesProvider);
+        builder.setTitle("🔑 " + LocaleController.getString(R.string.ProtectedZone));
+        
+        final android.widget.EditText editText = new android.widget.EditText(getParentActivity());
+        editText.setHint(LocaleController.getString(R.string.EnterProtectedZonePassword));
+        editText.setInputType(android.text.InputType.TYPE_CLASS_TEXT | android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD);
+        editText.setImeOptions(android.view.inputmethod.EditorInfo.IME_ACTION_DONE);
+        editText.requestFocus();
+        
+        android.widget.FrameLayout container = new android.widget.FrameLayout(getParentActivity());
+        android.widget.FrameLayout.LayoutParams params = new android.widget.FrameLayout.LayoutParams(
+            android.widget.FrameLayout.LayoutParams.MATCH_PARENT,
+            android.widget.FrameLayout.LayoutParams.WRAP_CONTENT
+        );
+        params.leftMargin = AndroidUtilities.dp(24);
+        params.rightMargin = AndroidUtilities.dp(24);
+        editText.setLayoutParams(params);
+        container.addView(editText);
+        builder.setView(container);
+        
+        builder.setPositiveButton(LocaleController.getString(R.string.Start), (dialogInterface, i) -> {
+            String password = editText.getText().toString();
+            if (hiddenManager.checkPassword(password)) {
+                // Correct password - create secret chat and hide it
+                createAndHideSecretChat();
+            } else {
+                // Wrong password
+                BulletinFactory.of(ProfileActivity.this).createErrorBulletin(
+                    LocaleController.getString(R.string.WrongPassword)
+                ).show();
+            }
+        });
+        builder.setNegativeButton(LocaleController.getString(R.string.Cancel), null);
+        
+        AlertDialog dialog = builder.create();
+        showDialog(dialog);
+        
+        // Show keyboard
+        AndroidUtilities.runOnUIThread(() -> {
+            editText.requestFocus();
+            AndroidUtilities.showKeyboard(editText);
+        }, 100);
+    }
+    
+    private void createAndHideSecretChat() {
+        if (MessagesController.getInstance(currentAccount).isFrozen()) {
+            AccountFrozenAlert.show(currentAccount);
+            return;
+        }
+        
+        TLRPC.User user = getMessagesController().getUser(userId);
+        if (user == null) {
+            return;
+        }
+        
+        creatingChat = true;
+        
+        // Set flag to auto-hide the next created secret chat
+        HiddenChatsManager.getInstance().setHideNextSecretChat(true);
+        
+        // Start secret chat - it will be automatically hidden via the flag
+        getSecretChatHelper().startSecretChat(getParentActivity(), user);
     }
 }
