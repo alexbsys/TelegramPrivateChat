@@ -182,6 +182,7 @@ public class VoIPFragment implements
 
     private VoIPStatusTextView statusTextView;
     private TextView tariffInfoView;
+    private TextView encryptionStatusView;
     private Runnable tariffTimerRunnable;
     private ConferenceParticipantsView participantsView;
     private ImageView backIcon;
@@ -1071,6 +1072,18 @@ public class VoIPFragment implements
         tariffInfoView.setAlpha(0.7f);
         tariffInfoView.setVisibility(View.GONE);
         statusLayout.addView(tariffInfoView, LayoutHelper.createLinear(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT, Gravity.CENTER_HORIZONTAL, 0, 0, 0, 6));
+        
+        // Encryption status view
+        encryptionStatusView = new TextView(context);
+        encryptionStatusView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 12);
+        encryptionStatusView.setTextColor(Color.WHITE);
+        encryptionStatusView.setGravity(Gravity.CENTER_HORIZONTAL);
+        encryptionStatusView.setAlpha(0.8f);
+        encryptionStatusView.setVisibility(View.GONE);
+        statusLayout.addView(encryptionStatusView, LayoutHelper.createLinear(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT, Gravity.CENTER_HORIZONTAL, 0, 0, 0, 4));
+        
+        // Update encryption status display
+        updateEncryptionStatusDisplay();
 
         if (state != null && state.getUser() != null && state.isConference() && state.getGroupCall() != null) {
             participantsView = new ConferenceParticipantsView(context);
@@ -1810,6 +1823,8 @@ public class VoIPFragment implements
         if (isFinished || switchingToPip) {
             return;
         }
+        // Update encryption status display
+        updateEncryptionStatusDisplay();
         lockOnScreen = false;
         boolean animated = previousState != -1;
         boolean showAcceptDeclineView = false;
@@ -3208,6 +3223,65 @@ public class VoIPFragment implements
         if (tariffTimerRunnable != null) {
             AndroidUtilities.cancelRunOnUIThread(tariffTimerRunnable);
             tariffTimerRunnable = null;
+        }
+    }
+    
+    /**
+     * Updates the encryption status display in the call UI.
+     * Shows outgoing and incoming encryption status with appropriate icons.
+     */
+    private void updateEncryptionStatusDisplay() {
+        if (encryptionStatusView == null) {
+            return;
+        }
+        
+        try {
+            org.telegram.messenger.EncryptedCallsManager encManager = org.telegram.messenger.EncryptedCallsManager.getInstance();
+            
+            // Check if encryption is configured at all
+            boolean hasOutgoing = encManager.hasOutgoingPassword();
+            boolean hasIncoming = encManager.getIncomingKeys().size() > 0;
+            
+            if (!hasOutgoing && !hasIncoming) {
+                encryptionStatusView.setVisibility(View.GONE);
+                return;
+            }
+            
+            StringBuilder status = new StringBuilder();
+            
+            // Outgoing status - based on whether we have a key configured
+            if (hasOutgoing) {
+                status.append("🔒 ").append(LocaleController.getString("OutgoingEncrypted", R.string.OutgoingEncrypted));
+            } else {
+                status.append("⚠️ ").append(LocaleController.getString("OutgoingUnencrypted", R.string.OutgoingUnencrypted));
+            }
+            
+            status.append("\n");
+            
+            // Incoming status - get from native code
+            int nativeStatus = 0;
+            try {
+                nativeStatus = org.telegram.messenger.voip.NativeInstance.getIncomingEncryptionStatus();
+            } catch (Exception e) {
+                // Native library might not be loaded yet
+            }
+            
+            // 0 = Unencrypted, 1 = DecryptionSuccess, 2 = DecryptionFailed
+            if (nativeStatus == 1) {
+                status.append("🔒 ").append(LocaleController.getString("IncomingDecrypted", R.string.IncomingDecrypted));
+                encryptionStatusView.setTextColor(Color.GREEN);
+            } else if (nativeStatus == 2) {
+                status.append("❌ ").append(LocaleController.getString("IncomingDecryptionFailed", R.string.IncomingDecryptionFailed));
+                encryptionStatusView.setTextColor(Color.RED);
+            } else {
+                status.append("⚠️ ").append(LocaleController.getString("IncomingUnencrypted", R.string.IncomingUnencrypted));
+                encryptionStatusView.setTextColor(Color.YELLOW);
+            }
+            
+            encryptionStatusView.setText(status.toString());
+            encryptionStatusView.setVisibility(View.VISIBLE);
+        } catch (Exception e) {
+            encryptionStatusView.setVisibility(View.GONE);
         }
     }
 

@@ -808,6 +808,10 @@ class WebRtcVideoReceiveChannel : public MediaChannelUtil,
   // Delay for unsignaled streams, which may be set before the stream exists.
   int default_recv_base_minimum_delay_ms_ RTC_GUARDED_BY(thread_checker_) = 0;
 
+  // Default frame decryptor for video, applied to all new receive streams
+  rtc::scoped_refptr<webrtc::FrameDecryptorInterface> default_frame_decryptor_
+      RTC_GUARDED_BY(thread_checker_);
+
   const MediaConfig::Video video_config_ RTC_GUARDED_BY(thread_checker_);
 
   // When the channel and demuxer get reconfigured, there is a window of time

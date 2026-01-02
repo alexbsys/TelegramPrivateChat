@@ -97,6 +97,7 @@ import org.telegram.messenger.AccountInstance;
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.ApplicationLoader;
 import org.telegram.messenger.CallSettingsManager;
+import org.telegram.messenger.EncryptedCallsManager;
 import org.telegram.messenger.BuildVars;
 import org.telegram.messenger.ChatObject;
 import org.telegram.messenger.ContactsController;
@@ -3619,6 +3620,10 @@ public class VoIPService extends Service implements SensorEventListener, AudioMa
 				}
 			}
 			// init
+			
+			// Setup custom frame encryption keys
+			setupCustomFrameEncryption();
+			
 			tgVoip[CAPTURE_DEVICE_CAMERA] = Instance.makeInstance(privateCall.protocol.library_versions.get(0), config, persistentStateFilePath, endpoints, proxy, getNetworkType(), encryptionKey, remoteSink[CAPTURE_DEVICE_CAMERA], captureDevice[CAPTURE_DEVICE_CAMERA], (uids, levels, voice) -> {
 				if (sharedInstance == null || privateCall == null) {
 					return;
@@ -3667,6 +3672,40 @@ public class VoIPService extends Service implements SensorEventListener, AudioMa
 		}
 	}
 
+	/**
+	 * Setup custom frame encryption keys for the call.
+	 * This method should be called before creating the VoIP instance.
+	 */
+	private void setupCustomFrameEncryption() {
+		try {
+			EncryptedCallsManager encryptedCallsManager = EncryptedCallsManager.getInstance();
+			encryptedCallsManager.resetCallStatus();
+			
+			// Clear any previous keys
+			NativeInstance.clearIncomingEncryptionKeys();
+			
+			// Set outgoing encryption key if configured
+			byte[] outgoingKey = encryptedCallsManager.getOutgoingDerivedKey();
+			if (outgoingKey != null && outgoingKey.length > 0) {
+				NativeInstance.setOutgoingEncryptionKey(outgoingKey);
+				FileLog.d("VoIPService: Outgoing call encryption enabled");
+			} else {
+				NativeInstance.setOutgoingEncryptionKey(null);
+				FileLog.d("VoIPService: Outgoing call encryption disabled");
+			}
+			
+			// Add all enabled incoming keys
+			java.util.List<byte[]> incomingKeys = encryptedCallsManager.getEnabledIncomingDerivedKeys();
+			for (byte[] key : incomingKeys) {
+				NativeInstance.addIncomingEncryptionKey(key);
+			}
+			FileLog.d("VoIPService: Added " + incomingKeys.size() + " incoming decryption keys");
+			
+		} catch (Exception e) {
+			FileLog.e("VoIPService: Error setting up custom frame encryption", e);
+		}
+	}
+	
 	public void playConnectedSound() {
 		Utilities.globalQueue.postRunnable(() -> soundPool.play(spVoiceChatStartId, 1.0f, 1.0f, 0, 0, 1));
 		playedConnectedSound = true;
@@ -4368,10 +4407,10 @@ public class VoIPService extends Service implements SensorEventListener, AudioMa
 		}
 		for (int a = 0; a < captureDevice.length; a++) {
 			if (captureDevice[a] != 0) {
-				if (destroyCaptureDevice[a]) {
-					NativeInstance.destroyVideoCapturer(captureDevice[a]);
-				}
+				// Always destroy camera on service destroy to prevent camera leak
+				NativeInstance.destroyVideoCapturer(captureDevice[a]);
 				captureDevice[a] = 0;
+				destroyCaptureDevice[a] = true;
 			}
 		}
 		cpuWakelock.release();

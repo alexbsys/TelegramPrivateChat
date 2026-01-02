@@ -21,10 +21,13 @@ import org.json.JSONObject;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
+import java.nio.ByteBuffer;
+import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
 import java.util.HashSet;
 import java.util.Set;
+import java.util.zip.CRC32;
 
 import javax.crypto.Cipher;
 import javax.crypto.SecretKey;
@@ -39,12 +42,14 @@ public class HiddenChatsManager {
 
     private static final String MAIN_CONFIG_FILE = "hidden_chats_config.enc";
     private static final String DECOY_CONFIG_FILE = "hidden_chats_decoy.enc";
-    private static final String FILTER_CACHE_FILE = "hidden_chats_filter.enc"; // For filtering without password
+    private static final String FILTER_CACHE_FILE = "hidden_chats_filter.enc"; // Legacy, not used
+    private static final String CRC_FILTER_FILE = "chat_filter.bin"; // CRC32 filter with random padding
     private static final String MAGIC_HEADER = "THCV2";
     private static final int SALT_LENGTH = 16;
     private static final int IV_LENGTH = 12;
     private static final int PBKDF2_ITERATIONS = 10000;
     private static final int KEY_LENGTH = 256;
+    private static final int MIN_CRC_ARRAY_SIZE = 64; // Minimum array size for privacy
 
     // Main password and list
     private String mainPasswordHash = null;
@@ -59,6 +64,10 @@ public class HiddenChatsManager {
     // Combined filter set - loaded at startup for filtering WITHOUT password
     // Contains IDs from BOTH main and decoy lists
     private Set<Long> filterHiddenDialogIds = new HashSet<>();
+    
+    // CRC32 filter set - loaded at startup, contains CRC32 values for privacy
+    // Mixed with random values to prevent analysis
+    private Set<Integer> filterCrcSet = new HashSet<>();
     
     // Current mode
     private boolean isHiddenChatsMode = false;
@@ -91,8 +100,161 @@ public class HiddenChatsManager {
     }
 
     private HiddenChatsManager() {
-        // Load filter cache at startup (encrypted with device key, no password needed)
+        // Load CRC filter at startup (unencrypted, mixed with random values)
+        loadCrcFilter();
+        // Also try legacy filter cache for migration
         loadFilterCache();
+        // Migrate from legacy to CRC filter if needed
+        migrateToСrcFilter();
+    }
+    
+    /**
+     * Migrate from legacy filter to CRC filter if legacy exists but CRC doesn't
+     */
+    private void migrateToСrcFilter() {
+        if (filterCrcSet.isEmpty() && !filterHiddenDialogIds.isEmpty()) {
+            FileLog.d("HiddenChatsManager: Migrating legacy filter to CRC filter");
+            // Copy legacy IDs to main list for CRC generation
+            mainHiddenDialogIds.addAll(filterHiddenDialogIds);
+            saveCrcFilter();
+            mainHiddenDialogIds.clear();
+        }
+    }
+    
+    /**
+     * Calculate CRC32 of dialog ID
+     */
+    private int calculateDialogCrc(long dialogId) {
+        CRC32 crc = new CRC32();
+        ByteBuffer buffer = ByteBuffer.allocate(8);
+        buffer.order(ByteOrder.LITTLE_ENDIAN);
+        buffer.putLong(dialogId);
+        crc.update(buffer.array());
+        return (int) crc.getValue();
+    }
+    
+    /**
+     * Check if dialog ID matches any CRC in the filter
+     */
+    public boolean isDialogInCrcFilter(long dialogId) {
+        int crc = calculateDialogCrc(dialogId);
+        return filterCrcSet.contains(crc);
+    }
+    
+    private File getCrcFilterFile() {
+        return new File(ApplicationLoader.applicationContext.getFilesDir(), CRC_FILTER_FILE);
+    }
+    
+    /**
+     * Load CRC filter at startup
+     * File format: 4 bytes count + array of 4-byte CRC32 values (mixed with random)
+     */
+    private void loadCrcFilter() {
+        try {
+            File file = getCrcFilterFile();
+            if (!file.exists()) {
+                return;
+            }
+            
+            FileInputStream fis = new FileInputStream(file);
+            byte[] data = new byte[(int) file.length()];
+            fis.read(data);
+            fis.close();
+            
+            if (data.length < 4) {
+                return;
+            }
+            
+            ByteBuffer buffer = ByteBuffer.wrap(data);
+            buffer.order(ByteOrder.LITTLE_ENDIAN);
+            
+            int count = buffer.getInt();
+            if (count < 0 || count > 10000) {
+                return; // Sanity check
+            }
+            
+            // Read all CRC values (including random padding)
+            while (buffer.remaining() >= 4) {
+                filterCrcSet.add(buffer.getInt());
+            }
+            
+            FileLog.d("HiddenChatsManager: Loaded CRC filter with " + filterCrcSet.size() + " entries");
+        } catch (Exception e) {
+            FileLog.e("HiddenChatsManager: Error loading CRC filter", e);
+        }
+    }
+    
+    /**
+     * Save CRC filter with random padding for privacy
+     */
+    private void saveCrcFilter() {
+        try {
+            // Collect all hidden dialog IDs from both lists
+            Set<Long> allIds = new HashSet<>();
+            allIds.addAll(mainHiddenDialogIds);
+            allIds.addAll(decoyHiddenDialogIds);
+            
+            // Also update in-memory filter
+            filterHiddenDialogIds.clear();
+            filterHiddenDialogIds.addAll(allIds);
+            
+            // Calculate CRC32 for each ID
+            Set<Integer> realCrcs = new HashSet<>();
+            for (Long id : allIds) {
+                realCrcs.add(calculateDialogCrc(id));
+            }
+            
+            // Determine array size (minimum MIN_CRC_ARRAY_SIZE, expand if needed)
+            int arraySize = MIN_CRC_ARRAY_SIZE;
+            while (realCrcs.size() > arraySize) {
+                arraySize *= 2;
+            }
+            
+            // Create array with random values
+            SecureRandom random = new SecureRandom();
+            int[] crcArray = new int[arraySize];
+            for (int i = 0; i < arraySize; i++) {
+                crcArray[i] = random.nextInt();
+            }
+            
+            // Insert real CRCs at random positions
+            int[] positions = new int[realCrcs.size()];
+            Set<Integer> usedPositions = new HashSet<>();
+            int idx = 0;
+            for (Integer crc : realCrcs) {
+                int pos;
+                do {
+                    pos = random.nextInt(arraySize);
+                } while (usedPositions.contains(pos));
+                usedPositions.add(pos);
+                positions[idx++] = pos;
+                crcArray[pos] = crc;
+            }
+            
+            // Update in-memory CRC filter set
+            filterCrcSet.clear();
+            for (int crc : crcArray) {
+                filterCrcSet.add(crc);
+            }
+            
+            // Write to file: count + array
+            ByteBuffer buffer = ByteBuffer.allocate(4 + arraySize * 4);
+            buffer.order(ByteOrder.LITTLE_ENDIAN);
+            buffer.putInt(realCrcs.size()); // Store real count (for info only)
+            for (int crc : crcArray) {
+                buffer.putInt(crc);
+            }
+            
+            File file = getCrcFilterFile();
+            FileOutputStream fos = new FileOutputStream(file);
+            fos.write(buffer.array());
+            fos.close();
+            
+            FileLog.d("HiddenChatsManager: Saved CRC filter with " + realCrcs.size() + " real + " + 
+                     (arraySize - realCrcs.size()) + " random entries");
+        } catch (Exception e) {
+            FileLog.e("HiddenChatsManager: Error saving CRC filter", e);
+        }
     }
 
     private File getMainConfigFile() {
@@ -395,8 +557,8 @@ public class HiddenChatsManager {
             fos.write(encrypted);
             fos.close();
             
-            // Update filter cache for startup filtering
-            saveFilterCache();
+            // Update CRC filter for startup filtering (privacy-preserving)
+            saveCrcFilter();
         } catch (Exception e) {
             FileLog.e(e);
         }
@@ -424,8 +586,8 @@ public class HiddenChatsManager {
             fos.write(encrypted);
             fos.close();
             
-            // Update filter cache for startup filtering
-            saveFilterCache();
+            // Update CRC filter for startup filtering (privacy-preserving)
+            saveCrcFilter();
         } catch (Exception e) {
             FileLog.e(e);
         }
@@ -621,13 +783,26 @@ public class HiddenChatsManager {
      * Used for filtering main chat list - should hide chats from BOTH lists
      */
     public boolean isHiddenChat(long dialogId) {
-        // Always check filter cache first - it's loaded at startup without password
-        // This ensures hidden chats are filtered even before password is entered
+        // First check CRC filter - works even before password is entered
+        // Uses CRC32 matching which is fast and privacy-preserving
+        boolean inCrcFilter = isDialogInCrcFilter(dialogId);
+        if (inCrcFilter) {
+            FileLog.d("HiddenChatsManager: isHiddenChat(" + dialogId + ") = true (CRC filter match)");
+            return true;
+        }
+        // Also check legacy filter cache
         if (filterHiddenDialogIds.contains(dialogId)) {
+            FileLog.d("HiddenChatsManager: isHiddenChat(" + dialogId + ") = true (legacy filter)");
             return true;
         }
         // Also check in-memory lists (in case filter cache wasn't loaded yet)
-        return mainHiddenDialogIds.contains(dialogId) || decoyHiddenDialogIds.contains(dialogId);
+        boolean inMain = mainHiddenDialogIds.contains(dialogId);
+        boolean inDecoy = decoyHiddenDialogIds.contains(dialogId);
+        if (inMain || inDecoy) {
+            FileLog.d("HiddenChatsManager: isHiddenChat(" + dialogId + ") = true (in-memory: main=" + inMain + ", decoy=" + inDecoy + ")");
+            return true;
+        }
+        return false;
     }
     
     /**
@@ -672,12 +847,32 @@ public class HiddenChatsManager {
 
     /**
      * Has hidden chats in CURRENT mode
+     * Also checks CRC filter for chats hidden before password was entered
      */
     public boolean hasHiddenChats() {
+        // Check CRC filter first - works even before password entered
+        if (!filterCrcSet.isEmpty()) {
+            return true;
+        }
+        // Check legacy filter
+        if (!filterHiddenDialogIds.isEmpty()) {
+            return true;
+        }
+        // Check in-memory lists
         if (isDecoyMode) {
             return !decoyHiddenDialogIds.isEmpty();
         }
         return !mainHiddenDialogIds.isEmpty();
+    }
+    
+    /**
+     * Has any hidden chats at all (for UI indication)
+     */
+    public boolean hasAnyHiddenChats() {
+        return !filterCrcSet.isEmpty() || 
+               !filterHiddenDialogIds.isEmpty() || 
+               !mainHiddenDialogIds.isEmpty() || 
+               !decoyHiddenDialogIds.isEmpty();
     }
 
     /**

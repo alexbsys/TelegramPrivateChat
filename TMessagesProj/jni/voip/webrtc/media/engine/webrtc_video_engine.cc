@@ -2878,6 +2878,13 @@ bool WebRtcVideoReceiveChannel::AddRecvStream(const StreamParams& sp,
   if (unsignaled_frame_transformer_ && !config.frame_transformer)
     config.frame_transformer = unsignaled_frame_transformer_;
 
+  // CRITICAL: Set frame decryptor in config BEFORE creating stream!
+  // This ensures BufferedFrameDecryptor is created with the decryptor from the start
+  if (default_frame_decryptor_) {
+    RTC_LOG(LS_INFO) << "Setting frame_decryptor in config BEFORE stream creation, SSRC=" << sp.first_ssrc();
+    config.frame_decryptor = default_frame_decryptor_;
+  }
+
   auto receive_stream =
       new WebRtcVideoReceiveStream(call_, sp, std::move(config), default_stream,
                                    recv_codecs_, flexfec_config);
@@ -2885,6 +2892,7 @@ bool WebRtcVideoReceiveChannel::AddRecvStream(const StreamParams& sp,
     receive_stream->StartReceiveStream();
   }
   receive_streams_[sp.first_ssrc()] = receive_stream;
+  
   return true;
 }
 
@@ -3077,6 +3085,14 @@ void WebRtcVideoReceiveChannel::OnPacketReceived(
 
 bool WebRtcVideoReceiveChannel::MaybeCreateDefaultReceiveStream(
     const webrtc::RtpPacketReceived& packet) {
+  static int unknown_ssrc_count = 0;
+  unknown_ssrc_count++;
+  if (unknown_ssrc_count <= 20 || unknown_ssrc_count % 500 == 0) {
+    RTC_LOG(LS_INFO) << "MaybeCreateDefaultReceiveStream: unknown SSRC packet #" 
+                     << unknown_ssrc_count << ", ssrc=" << packet.Ssrc()
+                     << ", has_default_decryptor=" << (default_frame_decryptor_ != nullptr);
+  }
+  
   if (discard_unknown_ssrc_packets_) {
     return false;
   }
@@ -3180,6 +3196,15 @@ void WebRtcVideoReceiveChannel::ReCreateDefaultReceiveStream(
   // stream.
   SetBaseMinimumPlayoutDelayMs(ssrc, default_recv_base_minimum_delay_ms);
   SetSink(ssrc, default_sink_);
+  
+  // Apply default frame decryptor if set
+  if (default_frame_decryptor_) {
+    auto matching_stream = receive_streams_.find(ssrc);
+    if (matching_stream != receive_streams_.end()) {
+      RTC_LOG(LS_INFO) << "Applying default frame decryptor to new stream SSRC=" << ssrc;
+      matching_stream->second->SetFrameDecryptor(default_frame_decryptor_);
+    }
+  }
 }
 
 void WebRtcVideoReceiveChannel::SetInterface(
@@ -3195,9 +3220,41 @@ void WebRtcVideoReceiveChannel::SetFrameDecryptor(
     uint32_t ssrc,
     rtc::scoped_refptr<webrtc::FrameDecryptorInterface> frame_decryptor) {
   RTC_DCHECK_RUN_ON(&thread_checker_);
+  
+  // If ssrc is 0, store as default decryptor for all new streams
+  if (ssrc == 0) {
+    default_frame_decryptor_ = frame_decryptor;
+    // Apply to all existing streams
+    for (auto& stream_pair : receive_streams_) {
+      stream_pair.second->SetFrameDecryptor(frame_decryptor);
+    }
+    return;
+  }
+  
   auto matching_stream = receive_streams_.find(ssrc);
   if (matching_stream != receive_streams_.end()) {
+    RTC_LOG(LS_INFO) << "SetFrameDecryptor: Found stream by direct SSRC lookup, ssrc=" << ssrc;
     matching_stream->second->SetFrameDecryptor(frame_decryptor);
+  } else {
+    // SSRC not found as key - check if it's known to us at all
+    bool is_known_ssrc = (receive_ssrcs_.find(ssrc) != receive_ssrcs_.end());
+    RTC_LOG(LS_INFO) << "SetFrameDecryptor: SSRC " << ssrc 
+                     << " not a stream key, is_known=" << is_known_ssrc
+                     << ", receive_streams_.size()=" << receive_streams_.size();
+    
+    if (is_known_ssrc) {
+      // This SSRC is known but not the primary key - apply to all streams
+      // because in simulcast/SVC, all SSRCs share the same video stream
+      for (auto& stream_pair : receive_streams_) {
+        RTC_LOG(LS_INFO) << "SetFrameDecryptor: Applying to stream key=" << stream_pair.first 
+                         << " for secondary ssrc=" << ssrc;
+        stream_pair.second->SetFrameDecryptor(frame_decryptor);
+      }
+    } else {
+      // Stream doesn't exist yet, store as default
+      RTC_LOG(LS_INFO) << "SetFrameDecryptor: SSRC not found in any stream, storing as default, ssrc=" << ssrc;
+      default_frame_decryptor_ = frame_decryptor;
+    }
   }
 }
 
@@ -3598,10 +3655,15 @@ void WebRtcVideoReceiveChannel::WebRtcVideoReceiveStream::SetFrameDecryptor(
   config_.frame_decryptor = frame_decryptor;
   if (stream_) {
     RTC_LOG(LS_INFO)
-        << "Setting FrameDecryptor (recv) because of SetFrameDecryptor, "
-           "remote_ssrc="
-        << config_.rtp.remote_ssrc;
+        << "WebRtcVideoReceiveStream::SetFrameDecryptor: stream EXISTS, "
+           "remote_ssrc=" << config_.rtp.remote_ssrc
+        << ", decryptor=" << (frame_decryptor ? "set" : "null");
     stream_->SetFrameDecryptor(frame_decryptor);
+  } else {
+    RTC_LOG(LS_WARNING)
+        << "WebRtcVideoReceiveStream::SetFrameDecryptor: stream_ is NULL! "
+           "remote_ssrc=" << config_.rtp.remote_ssrc
+        << ", decryptor stored in config but NOT applied!";
   }
 }
 

@@ -11,6 +11,8 @@
 #include <voip/webrtc/media/base/media_constants.h>
 #include <tgnet/FileLog.h>
 #include <voip/tgcalls/group/GroupInstanceCustomImpl.h>
+#include <voip/tgcalls/CustomFrameEncryption.h>
+#include <voip/tgcalls/CustomEncryptionManager.h>
 
 #include <memory>
 #include <utility>
@@ -1291,4 +1293,75 @@ Java_org_telegram_messenger_voip_NativeInstance_getAllVersions(JNIEnv* env) {
         env->DeleteLocalRef(str);
     }
     return result;
+}
+
+// ============= Custom Frame Encryption JNI Methods =============
+
+extern "C"
+JNIEXPORT void JNICALL
+Java_org_telegram_messenger_voip_NativeInstance_setOutgoingEncryptionKey(JNIEnv *env, jclass clazz, jbyteArray key) {
+    auto& manager = tgcalls::CustomEncryptionManager::getInstance();
+    if (key == nullptr) {
+        manager.clearOutgoingKey();
+    } else {
+        jsize len = env->GetArrayLength(key);
+        jbyte* keyBytes = env->GetByteArrayElements(key, nullptr);
+        std::vector<uint8_t> keyVec(reinterpret_cast<const uint8_t*>(keyBytes), 
+                                    reinterpret_cast<const uint8_t*>(keyBytes) + len);
+        manager.setOutgoingKey(keyVec);
+        env->ReleaseByteArrayElements(key, keyBytes, JNI_ABORT);
+    }
+}
+
+extern "C"
+JNIEXPORT void JNICALL
+Java_org_telegram_messenger_voip_NativeInstance_addIncomingEncryptionKey(JNIEnv *env, jclass clazz, jbyteArray key) {
+    if (key == nullptr) {
+        return;
+    }
+    auto& manager = tgcalls::CustomEncryptionManager::getInstance();
+    jsize len = env->GetArrayLength(key);
+    jbyte* keyBytes = env->GetByteArrayElements(key, nullptr);
+    std::vector<uint8_t> keyVec(reinterpret_cast<const uint8_t*>(keyBytes), 
+                                reinterpret_cast<const uint8_t*>(keyBytes) + len);
+    manager.addIncomingKey(keyVec);
+    env->ReleaseByteArrayElements(key, keyBytes, JNI_ABORT);
+}
+
+extern "C"
+JNIEXPORT void JNICALL
+Java_org_telegram_messenger_voip_NativeInstance_clearIncomingEncryptionKeys(JNIEnv *env, jclass clazz) {
+    auto& manager = tgcalls::CustomEncryptionManager::getInstance();
+    manager.clearIncomingKeys();
+}
+
+extern "C"
+JNIEXPORT jboolean JNICALL
+Java_org_telegram_messenger_voip_NativeInstance_hasOutgoingEncryptionKey(JNIEnv *env, jclass clazz) {
+    return tgcalls::CustomEncryptionManager::getInstance().hasOutgoingKey() ? JNI_TRUE : JNI_FALSE;
+}
+
+extern "C"
+JNIEXPORT jint JNICALL
+Java_org_telegram_messenger_voip_NativeInstance_getIncomingEncryptionKeyCount(JNIEnv *env, jclass clazz) {
+    return static_cast<jint>(tgcalls::CustomEncryptionManager::getInstance().getIncomingKeyCount());
+}
+
+// Returns: 0 = Disabled/Unencrypted, 1 = DecryptionSuccess, 2 = DecryptionFailed
+extern "C"
+JNIEXPORT jint JNICALL
+Java_org_telegram_messenger_voip_NativeInstance_getIncomingEncryptionStatus(JNIEnv *env, jclass clazz) {
+    auto& manager = tgcalls::CustomEncryptionManager::getInstance();
+    auto status = manager.getLastIncomingStatus();
+    switch (status) {
+        case tgcalls::EncryptionStatusManager::Disabled:
+            return 0;
+        case tgcalls::EncryptionStatusManager::Active:
+        case tgcalls::EncryptionStatusManager::DecryptionSuccess:
+            return 1;
+        case tgcalls::EncryptionStatusManager::DecryptionFailed:
+            return 2;
+        default:
+            return 0;
+    }
 }

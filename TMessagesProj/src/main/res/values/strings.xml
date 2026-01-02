@@ -10241,6 +10241,7 @@
     
     <!-- Encrypted Messages -->
     <string name="EncryptedMessages">Encrypted Messages</string>
+    <string name="EncryptedMessage">Encrypted message</string>
     <string name="NeedHiddenChatsPassword">You need to set up a hidden chats password first. Go to menu → Advanced Safety Control.</string>
     <string name="EnterHiddenPasswordFirst">Please enter your hidden chats password first by searching for it in the main chat list.</string>
     <string name="EncryptedMessagesEnabledInfo">Encrypted messages are enabled for this chat. You can send encrypted messages using the lock button.</string>
@@ -10259,6 +10260,23 @@
     <string name="DuplicateDetectionInfo">Number of recent messages to check for duplicates. Set to 0 to disable. Detects when someone resends your encrypted message.</string>
     <string name="Disabled">Disabled</string>
     <string name="ProtectedZonePassword">Protected Zone Password</string>
+    
+    <!-- Encrypted Calls -->
+    <string name="EncryptedCalls">Encrypted Calls</string>
+    <string name="OutgoingCallPassword">Outgoing call encryption</string>
+    <string name="OutgoingCallPasswordInfo">Set a password to encrypt your outgoing audio and video during calls. The other party needs to have this password in their incoming keys list to decrypt.</string>
+    <string name="IncomingCallKeys">Incoming call keys</string>
+    <string name="AddIncomingKey">Add incoming key</string>
+    <string name="EditIncomingKey">Edit key</string>
+    <string name="KeyName">Key name</string>
+    <string name="EncryptedCallsInfo">Encrypted calls use additional encryption layer on top of Telegram\'s encryption. Both parties must use matching passwords.</string>
+
+    <!-- Call Encryption Status -->
+    <string name="OutgoingEncrypted">Outgoing: Encrypted</string>
+    <string name="OutgoingUnencrypted">Outgoing: Unencrypted</string>
+    <string name="IncomingDecrypted">Incoming: Decrypted</string>
+    <string name="IncomingDecryptionFailed">Incoming: No matching key</string>
+    <string name="IncomingUnencrypted">Incoming: Unencrypted</string>
     <string name="NeedProtectedZonePassword">You need to set a Protected Zone password first. Go to Advanced Safety Control in the menu.</string>
     <string name="ChatEncryptionPassword">Chat Encryption Password</string>
     <string name="EnterProtectedZonePasswordFirst">Enter your Protected Zone password to access encrypted messages settings.</string>

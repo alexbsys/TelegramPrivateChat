@@ -237,4 +237,13 @@ public class NativeInstance {
     public native void onRequestTimeComplete(long taskPtr, long time);
     public native void setConferenceCallId(long call_id);
     public static native String[] getAllVersions();
+    
+    // Custom Frame Encryption methods
+    public static native void setOutgoingEncryptionKey(byte[] key);
+    public static native void addIncomingEncryptionKey(byte[] key);
+    public static native void clearIncomingEncryptionKeys();
+    public static native boolean hasOutgoingEncryptionKey();
+    public static native int getIncomingEncryptionKeyCount();
+    // Returns: 0 = Unencrypted, 1 = DecryptionSuccess, 2 = DecryptionFailed
+    public static native int getIncomingEncryptionStatus();
 }

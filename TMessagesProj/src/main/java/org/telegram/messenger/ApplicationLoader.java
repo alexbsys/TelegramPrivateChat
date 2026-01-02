@@ -344,6 +344,9 @@ public class ApplicationLoader extends Application {
 
         AndroidUtilities.runOnUIThread(ApplicationLoader::startPushService);
 
+        // Initialize HiddenChatsManager early to load CRC filter for chat filtering
+        HiddenChatsManager.getInstance();
+        
         LauncherIconController.tryFixLauncherIconIfNeeded();
         ProxyRotationController.init();
     }

@@ -316,6 +316,7 @@
     
     <!-- Encrypted Messages -->
     <string name="EncryptedMessages">Зашифрованные сообщения</string>
+    <string name="EncryptedMessage">Зашифрованное сообщение</string>
     <string name="NeedHiddenChatsPassword">Сначала нужно установить пароль скрытых чатов. Перейдите в меню → Дополнительная безопасность.</string>
     <string name="EnterHiddenPasswordFirst">Сначала введите пароль скрытых чатов через поиск в главном списке чатов.</string>
     <string name="EncryptedMessagesEnabledInfo">Зашифрованные сообщения включены для этого чата. Все ваши сообщения будут автоматически шифроваться.</string>
@@ -334,6 +335,24 @@
     <string name="DuplicateDetectionInfo">Количество сообщений для проверки на дубликаты. 0 - отключено. Обнаруживает пересылку ваших зашифрованных сообщений.</string>
     <string name="Disabled">Отключено</string>
     <string name="ChatEncryptionPassword">Пароль шифрования чата</string>
+    
+    <!-- Encrypted Calls -->
+    <string name="EncryptedCalls">Шифрованные звонки</string>
+    <string name="OutgoingCallPassword">Шифрование исходящих</string>
+    <string name="OutgoingCallPasswordInfo">Установите пароль для шифрования исходящего аудио и видео во время звонков. Собеседник должен иметь этот пароль в списке входящих ключей для расшифровки.</string>
+    <string name="IncomingCallKeys">Ключи входящих звонков</string>
+    <string name="AddIncomingKey">Добавить ключ</string>
+    <string name="EditIncomingKey">Редактировать ключ</string>
+    <string name="KeyName">Название ключа</string>
+    <string name="EncryptedCallsInfo">Шифрованные звонки используют дополнительный уровень шифрования поверх шифрования Telegram. Обе стороны должны использовать совпадающие пароли.</string>
+    <string name="Enable">Включить</string>
+
+    <!-- Call Encryption Status -->
+    <string name="OutgoingEncrypted">Исходящие: Зашифрованы</string>
+    <string name="OutgoingUnencrypted">Исходящие: Не зашифрованы</string>
+    <string name="IncomingDecrypted">Входящие: Расшифрованы</string>
+    <string name="IncomingDecryptionFailed">Входящие: Нет подходящего ключа</string>
+    <string name="IncomingUnencrypted">Входящие: Не зашифрованы</string>
     <string name="NeedProtectedZonePassword">Вам нужно сначала установить пароль Protected Zone. Перейдите в Дополнительную безопасность в меню.</string>
     <string name="ProtectedZonePassword">Пароль Защищённой зоны</string>
     <string name="EnterProtectedZonePasswordFirst">Введите пароль Защищённой зоны для доступа к настройкам шифрования сообщений.</string>
