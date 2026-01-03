@@ -4,6 +4,7 @@
  * 
  * - One outgoing password for encrypting outbound audio/video
  * - Multiple incoming passwords for decrypting inbound audio/video
+ * - Supports AES-256 and GOST 28147 encryption
  */
 
 package org.telegram.messenger;
@@ -36,8 +37,24 @@ public class EncryptedCallsManager {
     private static final String CONFIG_FILE = "encrypted_calls_config.enc";
     private static final String MAGIC_HEADER = "ENCCALL1";
     
+    // Encryption types
+    public static final int ENCRYPTION_AES_256 = 0;
+    public static final int ENCRYPTION_GOST_28147 = 1;
+    public static final int ENCRYPTION_AES_256_LITE = 2;    // Fast mode
+    public static final int ENCRYPTION_GOST_28147_LITE = 3; // Fast mode
+    public static final int ENCRYPTION_PASSTHROUGH = 4;     // Debug: no encryption, just trailer
+    public static final int ENCRYPTION_BLOCK_XOR = 5;       // Debug: simple XOR encryption
+    
+    // Encryption type names for UI
+    public static final String[] ENCRYPTION_NAMES = {"AES-256", "ГОСТ 28147", "AES-256 LITE", "ГОСТ LITE", "PASSTHROUGH (Debug)", "BLOCK XOR (Debug)"};
+    public static final String[] ENCRYPTION_EMOJIS = {"🔒", "🔑", "⚡", "⚡", "🔓", "⊕"}; // Open lock for passthrough, XOR symbol for block xor
+    
+    // Default encryption type for new encryptions
+    private int defaultEncryptionType = ENCRYPTION_AES_256;
+    
     // Outgoing password (one) - used for encrypting our audio/video
     private String outgoingPassword = null;
+    private int outgoingEncryptionType = ENCRYPTION_AES_256;
     
     // Incoming passwords (multiple) - tried for decrypting incoming audio/video
     private List<IncomingKey> incomingKeys = new ArrayList<>();
@@ -50,6 +67,7 @@ public class EncryptedCallsManager {
     private boolean outgoingEncrypted = false;
     private boolean incomingEncrypted = false;
     private boolean incomingDecryptionFailed = false;
+    private int incomingDecryptedWithType = ENCRYPTION_AES_256; // Which encryption was used to decrypt
     
     public static class IncomingKey {
         public String name; // User-friendly name
@@ -99,6 +117,44 @@ public class EncryptedCallsManager {
         loadConfig();
     }
     
+    // ============= Encryption Type Management =============
+    
+    public int getDefaultEncryptionType() {
+        return defaultEncryptionType;
+    }
+    
+    public void setDefaultEncryptionType(int type) {
+        if (type >= ENCRYPTION_AES_256 && type <= ENCRYPTION_BLOCK_XOR) {
+            this.defaultEncryptionType = type;
+            saveConfig();
+        }
+    }
+    
+    public int getOutgoingEncryptionType() {
+        return outgoingEncryptionType;
+    }
+    
+    public void setOutgoingEncryptionType(int type) {
+        if (type >= ENCRYPTION_AES_256 && type <= ENCRYPTION_BLOCK_XOR) {
+            this.outgoingEncryptionType = type;
+            saveConfig();
+        }
+    }
+    
+    public static String getEncryptionName(int type) {
+        if (type >= 0 && type < ENCRYPTION_NAMES.length) {
+            return ENCRYPTION_NAMES[type];
+        }
+        return ENCRYPTION_NAMES[0];
+    }
+    
+    public static String getEncryptionEmoji(int type) {
+        if (type >= 0 && type < ENCRYPTION_EMOJIS.length) {
+            return ENCRYPTION_EMOJIS[type];
+        }
+        return ENCRYPTION_EMOJIS[0];
+    }
+    
     // ============= Password Management =============
     
     public String getOutgoingPassword() {
@@ -111,8 +167,26 @@ public class EncryptedCallsManager {
         saveConfig();
     }
     
+    public void setOutgoingPassword(String password, int encryptionType) {
+        this.outgoingPassword = password;
+        this.outgoingEncryptionType = encryptionType;
+        this.outgoingDerivedKey = password != null ? deriveKey(password) : null;
+        saveConfig();
+    }
+    
     public boolean hasOutgoingPassword() {
         return outgoingPassword != null && !outgoingPassword.isEmpty();
+    }
+    
+    // Per-call encryption toggle (for making encrypted vs unencrypted calls)
+    private boolean callEncryptionEnabled = true;
+    
+    public void setCallEncryptionEnabled(boolean enabled) {
+        this.callEncryptionEnabled = enabled;
+    }
+    
+    public boolean isCallEncryptionEnabled() {
+        return callEncryptionEnabled && hasOutgoingPassword();
     }
     
     public List<IncomingKey> getIncomingKeys() {
@@ -204,6 +278,7 @@ public class EncryptedCallsManager {
         outgoingEncrypted = hasOutgoingPassword();
         incomingEncrypted = false;
         incomingDecryptionFailed = false;
+        incomingDecryptedWithType = ENCRYPTION_AES_256;
     }
     
     public void setIncomingDecrypted(boolean decrypted) {
@@ -212,6 +287,13 @@ public class EncryptedCallsManager {
             incomingDecryptionFailed = false;
         } else {
             incomingDecryptionFailed = true;
+        }
+    }
+    
+    public void setIncomingDecrypted(boolean decrypted, int encryptionType) {
+        setIncomingDecrypted(decrypted);
+        if (decrypted) {
+            incomingDecryptedWithType = encryptionType;
         }
     }
     
@@ -225,6 +307,35 @@ public class EncryptedCallsManager {
     
     public boolean isIncomingDecryptionFailed() {
         return incomingDecryptionFailed;
+    }
+    
+    public int getIncomingDecryptedWithType() {
+        return incomingDecryptedWithType;
+    }
+    
+    /**
+     * Get formatted encryption status for UI
+     * @return e.g. "🔒 Зашифровано AES-256" or "🔑 Расшифровано ГОСТ 28147"
+     */
+    public String getOutgoingStatusText() {
+        if (!outgoingEncrypted) {
+            return "⚠️ " + LocaleController.getString("OutgoingUnencrypted", R.string.OutgoingUnencrypted);
+        }
+        return getEncryptionEmoji(outgoingEncryptionType) + " " + 
+               LocaleController.getString("OutgoingEncrypted", R.string.OutgoingEncrypted) + " " +
+               getEncryptionName(outgoingEncryptionType);
+    }
+    
+    public String getIncomingStatusText() {
+        if (incomingDecryptionFailed) {
+            return "❌ " + LocaleController.getString("IncomingDecryptionFailed", R.string.IncomingDecryptionFailed);
+        }
+        if (!incomingEncrypted) {
+            return "⚠️ " + LocaleController.getString("IncomingUnencrypted", R.string.IncomingUnencrypted);
+        }
+        return getEncryptionEmoji(incomingDecryptedWithType) + " " + 
+               LocaleController.getString("IncomingDecrypted", R.string.IncomingDecrypted) + " " +
+               getEncryptionName(incomingDecryptedWithType);
     }
     
     // ============= Config Persistence =============
@@ -253,6 +364,10 @@ public class EncryptedCallsManager {
             
             JSONObject json = new JSONObject(jsonStr);
             
+            // Load encryption settings
+            defaultEncryptionType = json.optInt("default_encryption_type", ENCRYPTION_AES_256);
+            outgoingEncryptionType = json.optInt("outgoing_encryption_type", ENCRYPTION_AES_256);
+            
             outgoingPassword = json.optString("outgoing_password", null);
             if (outgoingPassword != null && outgoingPassword.isEmpty()) {
                 outgoingPassword = null;
@@ -277,6 +392,8 @@ public class EncryptedCallsManager {
     private void saveConfig() {
         try {
             JSONObject json = new JSONObject();
+            json.put("default_encryption_type", defaultEncryptionType);
+            json.put("outgoing_encryption_type", outgoingEncryptionType);
             json.put("outgoing_password", outgoingPassword != null ? outgoingPassword : "");
             
             JSONArray keysArray = new JSONArray();

@@ -532,6 +532,8 @@ add_library(tgcalls STATIC
         voip/tgcalls/CustomFrameEncryption.cpp
         voip/tgcalls/CustomFrameEncryptorImpl.cpp
         voip/tgcalls/CustomEncryptionManager.cpp
+        voip/tgcalls/Gost28147.cpp
+        voip/tgcalls/FrameCryptors.cpp
         voip/tgcalls/MediaManager.cpp
         voip/tgcalls/FakeAudioDeviceModule.cpp
         voip/tgcalls/third-party/json11.cpp

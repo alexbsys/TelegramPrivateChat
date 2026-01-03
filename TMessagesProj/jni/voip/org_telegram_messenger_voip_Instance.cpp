@@ -1347,13 +1347,15 @@ Java_org_telegram_messenger_voip_NativeInstance_getIncomingEncryptionKeyCount(JN
     return static_cast<jint>(tgcalls::CustomEncryptionManager::getInstance().getIncomingKeyCount());
 }
 
-// Returns: 0 = Disabled/Unencrypted, 1 = DecryptionSuccess, 2 = DecryptionFailed
+// Returns: -1 = NotYetDetermined, 0 = Disabled/Unencrypted, 1 = DecryptionSuccess, 2 = DecryptionFailed
 extern "C"
 JNIEXPORT jint JNICALL
 Java_org_telegram_messenger_voip_NativeInstance_getIncomingEncryptionStatus(JNIEnv *env, jclass clazz) {
     auto& manager = tgcalls::CustomEncryptionManager::getInstance();
     auto status = manager.getLastIncomingStatus();
     switch (status) {
+        case tgcalls::EncryptionStatusManager::NotYetDetermined:
+            return -1;
         case tgcalls::EncryptionStatusManager::Disabled:
             return 0;
         case tgcalls::EncryptionStatusManager::Active:
@@ -1362,6 +1364,27 @@ Java_org_telegram_messenger_voip_NativeInstance_getIncomingEncryptionStatus(JNIE
         case tgcalls::EncryptionStatusManager::DecryptionFailed:
             return 2;
         default:
-            return 0;
+            return -1;
     }
+}
+
+// Returns: 0 = AES-256, 1 = GOST 28147
+extern "C"
+JNIEXPORT jint JNICALL
+Java_org_telegram_messenger_voip_NativeInstance_getIncomingEncryptionType(JNIEnv *env, jclass clazz) {
+    return static_cast<jint>(tgcalls::CustomEncryptionManager::getInstance().getIncomingEncryptionType());
+}
+
+// Returns: 0 = AES-256, 1 = GOST 28147
+extern "C"
+JNIEXPORT jint JNICALL
+Java_org_telegram_messenger_voip_NativeInstance_getOutgoingEncryptionType(JNIEnv *env, jclass clazz) {
+    return static_cast<jint>(tgcalls::CustomEncryptionManager::getInstance().getOutgoingEncryptionType());
+}
+
+// Set encryption type: 0 = AES-256, 1 = GOST 28147
+extern "C"
+JNIEXPORT void JNICALL
+Java_org_telegram_messenger_voip_NativeInstance_setOutgoingEncryptionType(JNIEnv *env, jclass clazz, jint type) {
+    tgcalls::CustomEncryptionManager::getInstance().setOutgoingEncryptionType(type);
 }

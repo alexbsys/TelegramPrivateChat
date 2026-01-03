@@ -246,4 +246,10 @@ public class NativeInstance {
     public static native int getIncomingEncryptionKeyCount();
     // Returns: 0 = Unencrypted, 1 = DecryptionSuccess, 2 = DecryptionFailed
     public static native int getIncomingEncryptionStatus();
+    // Returns: 0 = AES-256, 1 = GOST 28147
+    public static native int getIncomingEncryptionType();
+    // Returns: 0 = AES-256, 1 = GOST 28147
+    public static native int getOutgoingEncryptionType();
+    // Set encryption type for outgoing
+    public static native void setOutgoingEncryptionType(int type);
 }

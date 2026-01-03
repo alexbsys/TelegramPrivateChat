@@ -55,11 +55,13 @@ public class HiddenChatsActivity extends BaseFragment {
     private int forgetPasswordRow;
     private int askPasswordOnStartRow;
     private int duplicateDetectionRow;
+    private int encryptedSearchRow;
     private int sectionRow;
     
     // Encrypted calls section
     private int encryptedCallsHeaderRow;
     private int outgoingCallPasswordRow;
+    private int encryptionTypeRow;
     private int incomingCallsHeaderRow;
     private int incomingKeysStartRow;
     private int incomingKeysEndRow;
@@ -93,11 +95,13 @@ public class HiddenChatsActivity extends BaseFragment {
         forgetPasswordRow = rowCount++;
         askPasswordOnStartRow = rowCount++;
         duplicateDetectionRow = rowCount++;
+        encryptedSearchRow = rowCount++;
         sectionRow = rowCount++;
         
         // Encrypted calls section
         encryptedCallsHeaderRow = rowCount++;
         outgoingCallPasswordRow = rowCount++;
+        encryptionTypeRow = rowCount++;
         incomingCallsHeaderRow = rowCount++;
         
         java.util.List<org.telegram.messenger.EncryptedCallsManager.IncomingKey> incomingKeys = 
@@ -165,8 +169,12 @@ public class HiddenChatsActivity extends BaseFragment {
                 showAskPasswordModeDialog();
             } else if (position == duplicateDetectionRow) {
                 showDuplicateDetectionDialog();
+            } else if (position == encryptedSearchRow) {
+                showEncryptedSearchDialog();
             } else if (position == outgoingCallPasswordRow) {
                 showOutgoingCallPasswordDialog();
+            } else if (position == encryptionTypeRow) {
+                showEncryptionTypeDialog();
             } else if (position == addIncomingKeyRow) {
                 showAddIncomingKeyDialog(-1);
             } else if (position >= incomingKeysStartRow && position < incomingKeysEndRow) {
@@ -652,6 +660,91 @@ public class HiddenChatsActivity extends BaseFragment {
         builder.show();
     }
     
+    private void showEncryptedSearchDialog() {
+        Context context = getParentActivity();
+        if (context == null) return;
+        
+        EncryptedMessagesManager encManager = EncryptedMessagesManager.getInstance();
+        int currentLimit = encManager.getEncryptedSearchLimit();
+        
+        String[] items = new String[]{
+            LocaleController.getString("Disabled", R.string.Disabled),
+            "100",
+            "500",
+            "1000",
+            "5000",
+            LocaleController.getString("Unlimited", R.string.Unlimited)
+        };
+        int[] values = {0, 100, 500, 1000, 5000, -1};
+        
+        int selectedIndex = 2; // default 500
+        for (int i = 0; i < values.length; i++) {
+            if (values[i] == currentLimit) {
+                selectedIndex = i;
+                break;
+            }
+        }
+        
+        AlertDialog.Builder builder = new AlertDialog.Builder(context);
+        builder.setTitle(LocaleController.getString("EncryptedSearch", R.string.EncryptedSearch));
+        
+        // Mark current selection
+        CharSequence[] displayItems = new CharSequence[items.length];
+        for (int i = 0; i < items.length; i++) {
+            displayItems[i] = (i == selectedIndex ? "✓ " : "   ") + items[i];
+        }
+        
+        builder.setItems(displayItems, (dialog, which) -> {
+            encManager.setEncryptedSearchLimit(values[which]);
+            if (listAdapter != null) {
+                listAdapter.notifyDataSetChanged();
+            }
+        });
+        builder.setNegativeButton(LocaleController.getString("Cancel", R.string.Cancel), null);
+        builder.show();
+    }
+    
+    private void showEncryptionTypeDialog() {
+        Context context = getParentActivity();
+        if (context == null) return;
+        
+        org.telegram.messenger.EncryptedCallsManager manager = org.telegram.messenger.EncryptedCallsManager.getInstance();
+        int currentType = manager.getDefaultEncryptionType();
+        
+        String[] items = org.telegram.messenger.EncryptedCallsManager.ENCRYPTION_NAMES;
+        
+        AlertDialog.Builder builder = new AlertDialog.Builder(context);
+        builder.setTitle(LocaleController.getString("EncryptionType", R.string.EncryptionType));
+        
+        // Create items with checkmarks
+        CharSequence[] displayItems = new CharSequence[items.length];
+        for (int i = 0; i < items.length; i++) {
+            String emoji = org.telegram.messenger.EncryptedCallsManager.getEncryptionEmoji(i);
+            displayItems[i] = (i == currentType ? "✓ " : "   ") + emoji + " " + items[i];
+        }
+        
+        builder.setItems(displayItems, (dialog, which) -> {
+            manager.setDefaultEncryptionType(which);
+            manager.setOutgoingEncryptionType(which);
+            // Also set in native code
+            try {
+                org.telegram.messenger.voip.NativeInstance.setOutgoingEncryptionType(which);
+            } catch (Exception e) {
+                // Native may not be loaded
+            }
+            updateRows();
+            listView.getAdapter().notifyDataSetChanged();
+            
+            // Show confirmation toast
+            String typeName = org.telegram.messenger.EncryptedCallsManager.getEncryptionName(which);
+            android.widget.Toast.makeText(context, 
+                LocaleController.formatString("EncryptionTypeSet", R.string.EncryptionTypeSet, typeName),
+                android.widget.Toast.LENGTH_SHORT).show();
+        });
+        builder.setNegativeButton(LocaleController.getString("Cancel", R.string.Cancel), null);
+        builder.show();
+    }
+    
     private void showOutgoingCallPasswordDialog() {
         Context context = getParentActivity();
         if (context == null) return;
@@ -896,12 +989,28 @@ public class HiddenChatsActivity extends BaseFragment {
                     } else if (position == duplicateDetectionRow) {
                         int count = EncryptedMessagesManager.getInstance().getDuplicateDetectionCount();
                         String status = count > 0 ? String.valueOf(count) : LocaleController.getString("Disabled", R.string.Disabled);
-                        textCell.setTextAndValue(LocaleController.getString("DuplicateDetection", R.string.DuplicateDetection), status, false);
+                        textCell.setTextAndValue(LocaleController.getString("DuplicateDetection", R.string.DuplicateDetection), status, true);
+                    } else if (position == encryptedSearchRow) {
+                        int limit = EncryptedMessagesManager.getInstance().getEncryptedSearchLimit();
+                        String status;
+                        if (limit == 0) {
+                            status = LocaleController.getString("Disabled", R.string.Disabled);
+                        } else if (limit < 0) {
+                            status = LocaleController.getString("Unlimited", R.string.Unlimited);
+                        } else {
+                            status = String.valueOf(limit);
+                        }
+                        textCell.setTextAndValue(LocaleController.getString("EncryptedSearch", R.string.EncryptedSearch), status, false);
                     } else if (position == outgoingCallPasswordRow) {
                         org.telegram.messenger.EncryptedCallsManager callsManager = org.telegram.messenger.EncryptedCallsManager.getInstance();
                         boolean hasPassword = callsManager.hasOutgoingPassword();
                         String status = hasPassword ? "🔒" : "⚠️";
                         textCell.setTextAndValue(LocaleController.getString("OutgoingCallPassword", R.string.OutgoingCallPassword), status, true);
+                    } else if (position == encryptionTypeRow) {
+                        org.telegram.messenger.EncryptedCallsManager callsManager = org.telegram.messenger.EncryptedCallsManager.getInstance();
+                        String typeName = org.telegram.messenger.EncryptedCallsManager.getEncryptionName(callsManager.getDefaultEncryptionType());
+                        String emoji = org.telegram.messenger.EncryptedCallsManager.getEncryptionEmoji(callsManager.getDefaultEncryptionType());
+                        textCell.setTextAndValue(LocaleController.getString("EncryptionType", R.string.EncryptionType), emoji + " " + typeName, true);
                     } else if (position == addIncomingKeyRow) {
                         textCell.setTextAndIcon(LocaleController.getString("AddIncomingKey", R.string.AddIncomingKey), R.drawable.msg_add, false);
                         textCell.setColors(Theme.key_windowBackgroundWhiteBlueText4, Theme.key_windowBackgroundWhiteBlueText4);
@@ -991,6 +1100,7 @@ public class HiddenChatsActivity extends BaseFragment {
             if (position == hideChatsRow || position == unhideChatsRow || position == changePasswordRow 
                     || position == decoyPasswordRow || position == forgetPasswordRow 
                     || position == askPasswordOnStartRow || position == duplicateDetectionRow
+                    || position == encryptedSearchRow
                     || position == outgoingCallPasswordRow || position == addIncomingKeyRow) {
                 return 0;
             } else if (position == sectionRow || position == hiddenChatsInfoRow || position == encryptedCallsInfoRow) {

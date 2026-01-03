@@ -1075,10 +1075,11 @@ public class VoIPFragment implements
         
         // Encryption status view
         encryptionStatusView = new TextView(context);
-        encryptionStatusView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 12);
+        encryptionStatusView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 16);
         encryptionStatusView.setTextColor(Color.WHITE);
         encryptionStatusView.setGravity(Gravity.CENTER_HORIZONTAL);
-        encryptionStatusView.setAlpha(0.8f);
+        encryptionStatusView.setTypeface(null, android.graphics.Typeface.BOLD);
+        encryptionStatusView.setShadowLayer(2, 1, 1, Color.BLACK);
         encryptionStatusView.setVisibility(View.GONE);
         statusLayout.addView(encryptionStatusView, LayoutHelper.createLinear(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT, Gravity.CENTER_HORIZONTAL, 0, 0, 0, 4));
         
@@ -3229,6 +3230,7 @@ public class VoIPFragment implements
     /**
      * Updates the encryption status display in the call UI.
      * Shows outgoing and incoming encryption status with appropriate icons.
+     * Now shows encryption type (AES-256 or GOST 28147).
      */
     private void updateEncryptionStatusDisplay() {
         if (encryptionStatusView == null) {
@@ -3249,9 +3251,13 @@ public class VoIPFragment implements
             
             StringBuilder status = new StringBuilder();
             
-            // Outgoing status - based on whether we have a key configured
+            // Outgoing status - show encryption type
             if (hasOutgoing) {
-                status.append("🔒 ").append(LocaleController.getString("OutgoingEncrypted", R.string.OutgoingEncrypted));
+                String encTypeName = org.telegram.messenger.EncryptedCallsManager.getEncryptionName(encManager.getOutgoingEncryptionType());
+                String emoji = org.telegram.messenger.EncryptedCallsManager.getEncryptionEmoji(encManager.getOutgoingEncryptionType());
+                status.append(emoji).append(" ")
+                      .append(LocaleController.getString("OutgoingEncrypted", R.string.OutgoingEncrypted))
+                      .append(" ").append(encTypeName);
             } else {
                 status.append("⚠️ ").append(LocaleController.getString("OutgoingUnencrypted", R.string.OutgoingUnencrypted));
             }
@@ -3259,29 +3265,147 @@ public class VoIPFragment implements
             status.append("\n");
             
             // Incoming status - get from native code
-            int nativeStatus = 0;
+            // Status: -1 = NotYetDetermined (connecting), 0 = Unencrypted, 1 = DecryptionSuccess, 2 = DecryptionFailed
+            // EncType: -1 = not determined, 0 = AES-256, 1 = GOST, 2 = AES LITE, 3 = GOST LITE
+            int nativeStatus = -1;
+            int nativeEncType = -1;
             try {
                 nativeStatus = org.telegram.messenger.voip.NativeInstance.getIncomingEncryptionStatus();
+                nativeEncType = org.telegram.messenger.voip.NativeInstance.getIncomingEncryptionType();
             } catch (Exception e) {
                 // Native library might not be loaded yet
             }
             
-            // 0 = Unencrypted, 1 = DecryptionSuccess, 2 = DecryptionFailed
-            if (nativeStatus == 1) {
-                status.append("🔒 ").append(LocaleController.getString("IncomingDecrypted", R.string.IncomingDecrypted));
+            if (nativeStatus == 1 && nativeEncType >= 0) {
+                // Decryption success with known type
+                String encTypeName = org.telegram.messenger.EncryptedCallsManager.getEncryptionName(nativeEncType);
+                String emoji = org.telegram.messenger.EncryptedCallsManager.getEncryptionEmoji(nativeEncType);
+                status.append(emoji).append(" ")
+                      .append(LocaleController.getString("IncomingDecrypted", R.string.IncomingDecrypted))
+                      .append(" ").append(encTypeName);
                 encryptionStatusView.setTextColor(Color.GREEN);
+                encryptionStatusView.setOnClickListener(null);
             } else if (nativeStatus == 2) {
+                // Decryption failed
                 status.append("❌ ").append(LocaleController.getString("IncomingDecryptionFailed", R.string.IncomingDecryptionFailed));
+                status.append("\n").append(LocaleController.getString("TapToEnterKey", R.string.TapToEnterKey));
                 encryptionStatusView.setTextColor(Color.RED);
-            } else {
+                encryptionStatusView.setOnClickListener(v -> showEnterDecryptionKeyDialog());
+            } else if (nativeStatus == -1) {
+                // Not yet determined - still connecting (no packets received yet)
+                status.append("⏳ ").append(LocaleController.getString("Connecting", R.string.Connecting));
+                encryptionStatusView.setTextColor(Color.WHITE);
+                encryptionStatusView.setOnClickListener(null);
+            } else if (nativeStatus == 0) {
+                // Unencrypted packets received
                 status.append("⚠️ ").append(LocaleController.getString("IncomingUnencrypted", R.string.IncomingUnencrypted));
                 encryptionStatusView.setTextColor(Color.YELLOW);
+                encryptionStatusView.setOnClickListener(null);
+            } else {
+                // Unknown status - treat as unencrypted
+                status.append("⚠️ ").append(LocaleController.getString("IncomingUnencrypted", R.string.IncomingUnencrypted));
+                encryptionStatusView.setTextColor(Color.YELLOW);
+                encryptionStatusView.setOnClickListener(null);
             }
             
             encryptionStatusView.setText(status.toString());
             encryptionStatusView.setVisibility(View.VISIBLE);
         } catch (Exception e) {
             encryptionStatusView.setVisibility(View.GONE);
+        }
+    }
+
+    /**
+     * Shows a dialog to enter a decryption key during an active call
+     */
+    private void showEnterDecryptionKeyDialog() {
+        if (activity == null) return;
+        
+        android.app.AlertDialog.Builder builder = new android.app.AlertDialog.Builder(activity);
+        builder.setTitle(LocaleController.getString("EnterDecryptionKey", R.string.EnterDecryptionKey));
+        
+        android.widget.LinearLayout layout = new android.widget.LinearLayout(activity);
+        layout.setOrientation(android.widget.LinearLayout.VERTICAL);
+        layout.setPadding(dp(24), dp(8), dp(24), dp(0));
+        
+        // Key name input
+        android.widget.EditText nameInput = new android.widget.EditText(activity);
+        nameInput.setHint(LocaleController.getString("KeyName", R.string.KeyName));
+        // Default name with caller name and time
+        String defaultName = "";
+        if (callingUser != null) {
+            defaultName = org.telegram.messenger.ContactsController.formatName(
+                callingUser.first_name, callingUser.last_name);
+        }
+        defaultName += " " + android.text.format.DateFormat.format("dd.MM HH:mm", System.currentTimeMillis());
+        nameInput.setText(defaultName);
+        layout.addView(nameInput);
+        
+        // Password input
+        android.widget.EditText passwordInput = new android.widget.EditText(activity);
+        passwordInput.setHint(LocaleController.getString("Password", R.string.Password));
+        passwordInput.setInputType(android.text.InputType.TYPE_CLASS_TEXT | android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD);
+        layout.addView(passwordInput);
+        
+        // Save checkbox
+        android.widget.CheckBox saveCheckbox = new android.widget.CheckBox(activity);
+        saveCheckbox.setText(LocaleController.getString("SaveToKeyStorage", R.string.SaveToKeyStorage));
+        saveCheckbox.setChecked(true);
+        layout.addView(saveCheckbox);
+        
+        builder.setView(layout);
+        
+        builder.setPositiveButton(LocaleController.getString("OK", R.string.OK), (dialog, which) -> {
+            String name = nameInput.getText().toString().trim();
+            String password = passwordInput.getText().toString();
+            
+            if (password.isEmpty()) {
+                return;
+            }
+            
+            // Add key to manager
+            org.telegram.messenger.EncryptedCallsManager manager = org.telegram.messenger.EncryptedCallsManager.getInstance();
+            
+            // Add to incoming keys if save is checked
+            if (saveCheckbox.isChecked() && !name.isEmpty()) {
+                manager.addIncomingKey(name, password);
+            }
+            
+            // Also add to native for immediate use
+            try {
+                // Derive key and add to native
+                byte[] derivedKey = deriveKeyFromPassword(password);
+                org.telegram.messenger.voip.NativeInstance.addIncomingEncryptionKey(derivedKey);
+            } catch (Exception e) {
+                org.telegram.messenger.FileLog.e(e);
+            }
+            
+            // Update UI
+            updateEncryptionStatusDisplay();
+        });
+        
+        builder.setNegativeButton(LocaleController.getString("Cancel", R.string.Cancel), null);
+        builder.show();
+    }
+    
+    /**
+     * Derives a 256-bit key from password using PBKDF2
+     */
+    private byte[] deriveKeyFromPassword(String password) {
+        try {
+            byte[] salt = "EncryptedCallsSalt2024".getBytes(java.nio.charset.StandardCharsets.UTF_8);
+            javax.crypto.spec.PBEKeySpec spec = new javax.crypto.spec.PBEKeySpec(
+                password.toCharArray(), salt, 10000, 256);
+            javax.crypto.SecretKeyFactory factory = javax.crypto.SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256");
+            return factory.generateSecret(spec).getEncoded();
+        } catch (Exception e) {
+            // Fallback to simple SHA-256
+            try {
+                java.security.MessageDigest digest = java.security.MessageDigest.getInstance("SHA-256");
+                return digest.digest(password.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            } catch (Exception e2) {
+                return new byte[32];
+            }
         }
     }
 

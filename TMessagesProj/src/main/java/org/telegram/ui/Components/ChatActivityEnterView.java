@@ -4537,6 +4537,47 @@ public class ChatActivityEnterView extends FrameLayout implements
                     });
                     sendPopupLayout.addView(sendWithoutSoundButton, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, DEFAULT_HEIGHT));
                 }
+                
+                // Add encryption toggle button
+                EncryptedMessagesManager encManager = EncryptedMessagesManager.getInstance();
+                if (dialog_id != 0) {
+                    boolean isEncryptionEnabled = encManager.isEncryptionEnabled(dialog_id);
+                    boolean hasPassword = encManager.getChatPassword(dialog_id) != null;
+                    
+                    ActionBarMenuSubItem encryptionToggle = new ActionBarMenuSubItem(getContext(), false, true, resourcesProvider);
+                    if (isEncryptionEnabled && hasPassword) {
+                        encryptionToggle.setTextAndIcon("🔒 " + LocaleController.getString("SendWithoutEncryption", R.string.SendWithoutEncryption), 0);
+                    } else if (hasPassword) {
+                        encryptionToggle.setTextAndIcon("🔓 " + LocaleController.getString("SendWithEncryption", R.string.SendWithEncryption), 0);
+                    } else {
+                        encryptionToggle.setTextAndIcon("🔐 " + LocaleController.getString("SetupEncryption", R.string.SetupEncryption), 0);
+                    }
+                    encryptionToggle.setMinimumWidth(dp(196));
+                    encryptionToggle.setOnClickListener(v -> {
+                        if (sendPopupWindow != null && sendPopupWindow.isShowing()) {
+                            sendPopupWindow.dismiss();
+                        }
+                        if (!hasPassword) {
+                            // Open encryption setup
+                            if (parentFragment != null) {
+                                parentFragment.showEncryptedMessagesDialog();
+                            }
+                        } else {
+                            // Toggle encryption for this chat
+                            if (isEncryptionEnabled) {
+                                encManager.setEncryptionEnabled(dialog_id, false);
+                            } else {
+                                encManager.setEncryptionEnabled(dialog_id, true);
+                            }
+                            // Update UI
+                            if (parentFragment != null) {
+                                parentFragment.updateEncryptedMessagesMenuItem();
+                            }
+                        }
+                    });
+                    sendPopupLayout.addView(encryptionToggle, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, DEFAULT_HEIGHT));
+                }
+                
                 sendPopupLayout.setupRadialSelectors(getThemedColor(Theme.key_dialogButtonSelector));
 
                 sendPopupWindow = new ActionBarPopupWindow(sendPopupLayout, LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT) {
@@ -7299,7 +7340,8 @@ public class ChatActivityEnterView extends FrameLayout implements
                 if (encManager.isEncryptionEnabled(dialog_id)) {
                     String password = encManager.getChatPassword(dialog_id);
                     if (password != null) {
-                        String encrypted = encManager.encryptMessage(messageText, password);
+                        int encType = encManager.getChatEncryptionType(dialog_id);
+                        String encrypted = encManager.encryptMessage(messageText, password, encType);
                         if (encrypted != null) {
                             messageText = encrypted;
                             // Clear entities for encrypted message

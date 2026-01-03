@@ -43,8 +43,9 @@ void CustomEncryptionManager::addIncomingKey(const std::vector<uint8_t>& key) {
 void CustomEncryptionManager::clearIncomingKeys() {
     std::lock_guard<std::mutex> lock(_mutex);
     _incomingKeys.clear();
-    _lastIncomingStatus = EncryptionStatusManager::Disabled;
-    LOGI("clearIncomingKeys: keys cleared");
+    _lastIncomingStatus = EncryptionStatusManager::NotYetDetermined;
+    _incomingEncryptionType = -1; // Reset to "not yet determined"
+    LOGI("clearIncomingKeys: keys cleared, encryption type reset");
 }
 
 size_t CustomEncryptionManager::getIncomingKeyCount() const {
@@ -97,6 +98,27 @@ rtc::scoped_refptr<CustomFrameDecryptorImpl> CustomEncryptionManager::createDecr
 EncryptionStatusManager CustomEncryptionManager::getLastIncomingStatus() const {
     std::lock_guard<std::mutex> lock(_mutex);
     return _lastIncomingStatus;
+}
+
+void CustomEncryptionManager::setOutgoingEncryptionType(int type) {
+    std::lock_guard<std::mutex> lock(_mutex);
+    _outgoingEncryptionType = type;
+    LOGI("setOutgoingEncryptionType: type=%d (%s)", type, type == 0 ? "AES-256" : "GOST 28147");
+}
+
+int CustomEncryptionManager::getOutgoingEncryptionType() const {
+    std::lock_guard<std::mutex> lock(_mutex);
+    return _outgoingEncryptionType;
+}
+
+int CustomEncryptionManager::getIncomingEncryptionType() const {
+    std::lock_guard<std::mutex> lock(_mutex);
+    return _incomingEncryptionType;
+}
+
+void CustomEncryptionManager::setIncomingEncryptionType(int type) {
+    std::lock_guard<std::mutex> lock(_mutex);
+    _incomingEncryptionType = type;
 }
 
 } // namespace tgcalls

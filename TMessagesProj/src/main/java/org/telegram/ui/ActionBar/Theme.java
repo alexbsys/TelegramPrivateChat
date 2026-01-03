@@ -4999,7 +4999,7 @@ public class Theme {
                     applyingTheme = customDefault;
                     currentDayTheme = customDefault;
                 } else {
-                    applyingTheme = defaultTheme;
+            applyingTheme = defaultTheme;
                 }
             } else {
                 applyingTheme = defaultTheme;

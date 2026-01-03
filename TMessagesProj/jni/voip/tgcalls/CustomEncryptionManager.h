@@ -15,10 +15,19 @@ class CustomFrameDecryptorImpl;
 
 // Encryption status for UI feedback (must match CustomFrameEncryption.h)
 enum class EncryptionStatusManager {
-    Disabled,
+    NotYetDetermined,  // Initial state - no packets received yet
+    Disabled,          // Unencrypted packets received
     Active,
     DecryptionSuccess,
     DecryptionFailed
+};
+
+// Encryption types
+enum class EncryptionType {
+    AES_256 = 0,
+    GOST_28147 = 1,
+    AES_256_LITE = 2,   // Fast: only first 64 bytes encrypted, rest XOR
+    GOST_28147_LITE = 3 // Fast: only first 64 bytes encrypted, rest XOR
 };
 
 // Singleton manager for frame encryption keys
@@ -49,6 +58,12 @@ public:
     // Get current status for JNI polling
     EncryptionStatusManager getLastIncomingStatus() const;
     
+    // Encryption type management
+    void setOutgoingEncryptionType(int type);
+    int getOutgoingEncryptionType() const;
+    int getIncomingEncryptionType() const;
+    void setIncomingEncryptionType(int type);
+    
 private:
     CustomEncryptionManager() = default;
     ~CustomEncryptionManager() = default;
@@ -62,7 +77,11 @@ private:
     StatusCallback _statusCallback;
     
     // Last reported status to avoid flooding
-    EncryptionStatusManager _lastIncomingStatus = EncryptionStatusManager::Disabled;
+    EncryptionStatusManager _lastIncomingStatus = EncryptionStatusManager::NotYetDetermined;
+    
+    // Encryption types
+    int _outgoingEncryptionType = 0; // 0 = AES-256, 1 = GOST 28147, 2 = AES LITE, 3 = GOST LITE
+    int _incomingEncryptionType = -1; // -1 = not yet determined, 0-3 = detected from incoming frames
 };
 
 } // namespace tgcalls

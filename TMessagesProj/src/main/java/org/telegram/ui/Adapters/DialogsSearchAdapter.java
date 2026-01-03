@@ -37,6 +37,7 @@ import org.telegram.messenger.ChatObject;
 import org.telegram.messenger.ContactsController;
 import org.telegram.messenger.DialogObject;
 import org.telegram.messenger.FileLog;
+import org.telegram.messenger.HiddenChatsManager;
 import org.telegram.messenger.LocaleController;
 import org.telegram.messenger.MediaDataController;
 import org.telegram.messenger.MessageObject;
@@ -219,6 +220,7 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
         private boolean forceDarkTheme;
         private boolean showPremiumBlock;
         private Theme.ResourcesProvider resourcesProvider;
+        private ArrayList<TLRPC.TL_topPeer> filteredHints = new ArrayList<>();
 
         public CategoryAdapterRecycler(Context context, int account, boolean drawChecked, boolean showPremiumBlock, Theme.ResourcesProvider resourcesProvider) {
             this.drawChecked = drawChecked;
@@ -226,9 +228,29 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
             currentAccount = account;
             this.showPremiumBlock = showPremiumBlock;
             this.resourcesProvider = resourcesProvider;
+            updateFilteredHints();
+        }
+        
+        private void updateFilteredHints() {
+            filteredHints.clear();
+            HiddenChatsManager hiddenManager = HiddenChatsManager.getInstance();
+            for (TLRPC.TL_topPeer peer : MediaDataController.getInstance(currentAccount).hints) {
+                long dialogId = 0;
+                if (peer.peer.user_id != 0) {
+                    dialogId = peer.peer.user_id;
+                } else if (peer.peer.channel_id != 0) {
+                    dialogId = -peer.peer.channel_id;
+                } else if (peer.peer.chat_id != 0) {
+                    dialogId = -peer.peer.chat_id;
+                }
+                if (!hiddenManager.isHiddenChat(dialogId)) {
+                    filteredHints.add(peer);
+                }
+            }
         }
 
         public void setIndex(int value) {
+            updateFilteredHints();
             notifyDataSetChanged();
         }
 
@@ -251,7 +273,8 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
         public void onBindViewHolder(RecyclerView.ViewHolder holder, int position) {
             HintDialogCell cell = (HintDialogCell) holder.itemView;
 
-            TLRPC.TL_topPeer peer = MediaDataController.getInstance(currentAccount).hints.get(position);
+            if (position >= filteredHints.size()) return;
+            TLRPC.TL_topPeer peer = filteredHints.get(position);
             TLRPC.Dialog dialog = new TLRPC.TL_dialog();
             TLRPC.Chat chat = null;
             TLRPC.User user = null;
@@ -278,7 +301,7 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
 
         @Override
         public int getItemCount() {
-            return MediaDataController.getInstance(currentAccount).hints.size();
+            return filteredHints.size();
         }
     }
 
@@ -621,9 +644,18 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
                             searchResultMessages.clear();
                         }
                         nextSearchRate = res.next_rate;
+                        // Get hidden chats manager for filtering search results
+                        org.telegram.messenger.HiddenChatsManager hiddenMgr = org.telegram.messenger.HiddenChatsManager.getInstance();
+                        
                         for (int a = 0; a < res.messages.size(); a++) {
                             TLRPC.Message message = res.messages.get(a);
                             long did = MessageObject.getDialogId(message);
+                            
+                            // Skip messages from hidden chats
+                            if (hiddenMgr.isHiddenChat(did)) {
+                                continue;
+                            }
+                            
                             int maxId = MessagesController.getInstance(currentAccount).deletedHistory.get(did);
                             if (maxId != 0 && message.id <= maxId) {
                                 continue;
@@ -740,8 +772,16 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
 
                 final ArrayList<RecentSearchObject> arrayList = new ArrayList<>();
                 final LongSparseArray<RecentSearchObject> hashMap = new LongSparseArray<>();
+                // Get hidden chats manager for filtering
+                org.telegram.messenger.HiddenChatsManager hiddenManager = org.telegram.messenger.HiddenChatsManager.getInstance();
+                
                 while (cursor.next()) {
                     long did = cursor.longValue(0);
+                    
+                    // Skip hidden chats in recent search results
+                    if (hiddenManager.isHiddenChat(did)) {
+                        continue;
+                    }
 
                     boolean add = false;
                     if (DialogObject.isEncryptedDialog(did)) {
@@ -1009,8 +1049,28 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
                 searchResultMessages.clear();
             }
             searchWas = true;
+            // Filter out hidden chats from search results
+            org.telegram.messenger.HiddenChatsManager hiddenManager = org.telegram.messenger.HiddenChatsManager.getInstance();
             for (int i = 0; i < result.size(); ++i) {
-                if (!filter(result.get(i))) {
+                Object obj = result.get(i);
+                // Check if this is a hidden chat
+                long dialogId = 0;
+                if (obj instanceof TLRPC.User) {
+                    dialogId = ((TLRPC.User) obj).id;
+                } else if (obj instanceof TLRPC.Chat) {
+                    dialogId = -((TLRPC.Chat) obj).id;
+                } else if (obj instanceof TLRPC.EncryptedChat) {
+                    dialogId = DialogObject.makeEncryptedDialogId(((TLRPC.EncryptedChat) obj).id);
+                }
+                if (dialogId != 0 && hiddenManager.isHiddenChat(dialogId)) {
+                    result.remove(i);
+                    if (i < names.size()) {
+                        names.remove(i);
+                    }
+                    i--;
+                    continue;
+                }
+                if (!filter(obj)) {
                     result.remove(i);
                     i--;
                 }
@@ -1785,7 +1845,25 @@ public class DialogsSearchAdapter extends RecyclerListView.SelectionAdapter {
     }
 
     private boolean hasHints() {
-        return !searchWas && !MediaDataController.getInstance(currentAccount).hints.isEmpty() && (dialogsType != DialogsActivity.DIALOGS_TYPE_START_ATTACH_BOT || dialogsActivity.allowUsers);
+        if (searchWas || dialogsType == DialogsActivity.DIALOGS_TYPE_START_ATTACH_BOT && !dialogsActivity.allowUsers) {
+            return false;
+        }
+        // Check if there are any non-hidden hints
+        HiddenChatsManager hiddenManager = HiddenChatsManager.getInstance();
+        for (TLRPC.TL_topPeer peer : MediaDataController.getInstance(currentAccount).hints) {
+            long dialogId = 0;
+            if (peer.peer.user_id != 0) {
+                dialogId = peer.peer.user_id;
+            } else if (peer.peer.channel_id != 0) {
+                dialogId = -peer.peer.channel_id;
+            } else if (peer.peer.chat_id != 0) {
+                dialogId = -peer.peer.chat_id;
+            }
+            if (!hiddenManager.isHiddenChat(dialogId)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private int messagesSectionPosition = -1;

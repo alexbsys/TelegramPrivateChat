@@ -3684,14 +3684,20 @@ public class VoIPService extends Service implements SensorEventListener, AudioMa
 			// Clear any previous keys
 			NativeInstance.clearIncomingEncryptionKeys();
 			
-			// Set outgoing encryption key if configured
-			byte[] outgoingKey = encryptedCallsManager.getOutgoingDerivedKey();
-			if (outgoingKey != null && outgoingKey.length > 0) {
-				NativeInstance.setOutgoingEncryptionKey(outgoingKey);
-				FileLog.d("VoIPService: Outgoing call encryption enabled");
+			// Set outgoing encryption key if enabled for this call
+			if (encryptedCallsManager.isCallEncryptionEnabled()) {
+				byte[] outgoingKey = encryptedCallsManager.getOutgoingDerivedKey();
+				if (outgoingKey != null && outgoingKey.length > 0) {
+					NativeInstance.setOutgoingEncryptionKey(outgoingKey);
+					NativeInstance.setOutgoingEncryptionType(encryptedCallsManager.getOutgoingEncryptionType());
+					FileLog.d("VoIPService: Outgoing call encryption enabled");
+				} else {
+					NativeInstance.setOutgoingEncryptionKey(null);
+					FileLog.d("VoIPService: Outgoing call encryption disabled (no key)");
+				}
 			} else {
 				NativeInstance.setOutgoingEncryptionKey(null);
-				FileLog.d("VoIPService: Outgoing call encryption disabled");
+				FileLog.d("VoIPService: Outgoing call encryption disabled (user choice)");
 			}
 			
 			// Add all enabled incoming keys

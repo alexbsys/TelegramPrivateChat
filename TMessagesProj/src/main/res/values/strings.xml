@@ -10264,11 +10264,24 @@
     <!-- Encrypted Calls -->
     <string name="EncryptedCalls">Encrypted Calls</string>
     <string name="OutgoingCallPassword">Outgoing call encryption</string>
+    <string name="EncryptionType">Encryption algorithm</string>
+    <string name="EncryptionTypeSet">Encryption set to %1$s</string>
+    <string name="EncryptionAlgorithm">Encryption algorithm</string>
+    <string name="EncryptedCall">Encrypted call</string>
+    <string name="EncryptedCallNeedsSetup">To make encrypted calls, you need to set up encryption password in Advanced Safety Control first.</string>
+    <string name="EncryptedSearch">Search in encrypted messages</string>
+    <string name="Unlimited">Unlimited</string>
+    <string name="SendWithoutEncryption">Send without encryption</string>
+    <string name="SendWithEncryption">Send encrypted</string>
+    <string name="SetupEncryption">Set up encryption</string>
+    <string name="TapToEnterKey">Tap to enter key</string>
+    <string name="EnterDecryptionKey">Enter decryption key</string>
+    <string name="KeyName">Key name</string>
+    <string name="SaveToKeyStorage">Save to key storage</string>
     <string name="OutgoingCallPasswordInfo">Set a password to encrypt your outgoing audio and video during calls. The other party needs to have this password in their incoming keys list to decrypt.</string>
     <string name="IncomingCallKeys">Incoming call keys</string>
     <string name="AddIncomingKey">Add incoming key</string>
     <string name="EditIncomingKey">Edit key</string>
-    <string name="KeyName">Key name</string>
     <string name="EncryptedCallsInfo">Encrypted calls use additional encryption layer on top of Telegram\'s encryption. Both parties must use matching passwords.</string>
 
     <!-- Call Encryption Status -->
