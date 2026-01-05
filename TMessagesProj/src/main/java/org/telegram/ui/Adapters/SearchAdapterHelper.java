@@ -222,14 +222,25 @@ public class SearchAdapterHelper {
                                     } else if (peer.channel_id != 0) {
                                         chat = chatsMap.get(peer.channel_id);
                                     }
+                                    // Filter out hidden chats from search results
+                                    org.telegram.messenger.HiddenChatsManager hiddenMgr = org.telegram.messenger.HiddenChatsManager.getInstance();
+                                    
                                     if (chat != null) {
                                         if (!allowChats || canAddGroupsOnly && !ChatObject.canAddBotsToChat(chat) || !allowGlobalResults && ChatObject.isNotInChat(chat) || !filter(chat)) {
+                                            continue;
+                                        }
+                                        // Skip hidden chats
+                                        if (hiddenMgr.isHiddenChat(-chat.id)) {
                                             continue;
                                         }
                                         globalSearch.add(chat);
                                         globalSearchMap.put(-chat.id, chat);
                                     } else if (user != null) {
                                         if (canAddGroupsOnly || !allowBots && user.bot || !allowSelf && user.self || !allowGlobalResults && b == 1 && !user.contact || !filter(user)) {
+                                            continue;
+                                        }
+                                        // Skip hidden chats (users)
+                                        if (hiddenMgr.isHiddenChat(user.id)) {
                                             continue;
                                         }
                                         globalSearch.add(user);
@@ -249,14 +260,26 @@ public class SearchAdapterHelper {
                                     } else if (peer.channel_id != 0) {
                                         chat = chatsMap.get(peer.channel_id);
                                     }
+                                    
+                                    // Filter out hidden chats from local search results
+                                    org.telegram.messenger.HiddenChatsManager hiddenMgr2 = org.telegram.messenger.HiddenChatsManager.getInstance();
+                                    
                                     if (chat != null) {
                                         if (!allowChats || canAddGroupsOnly && !ChatObject.canAddBotsToChat(chat) || -chat.id == exceptDialogId || !filter(chat)) {
+                                            continue;
+                                        }
+                                        // Skip hidden chats
+                                        if (hiddenMgr2.isHiddenChat(-chat.id)) {
                                             continue;
                                         }
                                         localServerSearch.add(chat);
                                         globalSearchMap.put(-chat.id, chat);
                                     } else if (user != null) {
                                         if (canAddGroupsOnly || !allowBots && user.bot || !allowSelf && user.self || user.id == exceptDialogId || !filter(user)) {
+                                            continue;
+                                        }
+                                        // Skip hidden chats (users)
+                                        if (hiddenMgr2.isHiddenChat(user.id)) {
                                             continue;
                                         }
                                         localServerSearch.add(user);
@@ -275,10 +298,16 @@ public class SearchAdapterHelper {
                 hasChanged = false;
             }
         }
-        if (!canAddGroupsOnly && phoneNumbers && query.startsWith("+") && query.length() > 3) {
+        // Enhanced phone number search: works with "+" prefix or pure numeric queries (3+ digits)
+        String strippedQuery = PhoneFormat.stripExceptNumbers(query);
+        boolean isPhoneQuery = (!canAddGroupsOnly && phoneNumbers && 
+            (query.startsWith("+") && query.length() > 3) || 
+            (strippedQuery.length() >= 3 && strippedQuery.equals(query.replaceAll("[^0-9]", ""))));
+        
+        if (isPhoneQuery) {
             phonesSearch.clear();
             phoneSearchMap.clear();
-            String phone = PhoneFormat.stripExceptNumbers(query);
+            String phone = strippedQuery;
             ArrayList<TLRPC.TL_contact> arrayList = ContactsController.getInstance(currentAccount).contacts;
             boolean hasFullMatch = false;
             for (int a = 0, N = arrayList.size(); a < N; a++) {
@@ -287,7 +316,8 @@ public class SearchAdapterHelper {
                 if (user == null) {
                     continue;
                 }
-                if (user.phone != null && user.phone.startsWith(phone)) {
+                // Search for phone number containing the query (not just starting with)
+                if (user.phone != null && user.phone.contains(phone)) {
                     if (!hasFullMatch) {
                         hasFullMatch = user.phone.length() == phone.length();
                     }
@@ -295,7 +325,7 @@ public class SearchAdapterHelper {
                     phoneSearchMap.put(user.id, user);
                 }
             }
-            if (!hasFullMatch) {
+            if (!hasFullMatch && query.startsWith("+")) {
                 phonesSearch.add("section");
                 phonesSearch.add(phone);
             }

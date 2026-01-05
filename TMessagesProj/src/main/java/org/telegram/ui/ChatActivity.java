@@ -160,6 +160,7 @@ import org.telegram.messenger.FlagSecureReason;
 import org.telegram.messenger.HashtagSearchController;
 import org.telegram.messenger.HiddenChatsManager;
 import org.telegram.messenger.EncryptedMessagesManager;
+import org.telegram.messenger.EncryptedCallsManager;
 import org.telegram.messenger.ImageLoader;
 import org.telegram.messenger.ImageLocation;
 import org.telegram.messenger.ImageReceiver;
@@ -3888,7 +3889,7 @@ public class ChatActivity extends BaseFragment implements
                     }
                 } else if (id == call || id == video_call) {
                     if (currentUser != null && getParentActivity() != null) {
-                        VoIPHelper.startCall(currentUser, id == video_call, userInfo != null && userInfo.video_calls_available, getParentActivity(), getMessagesController().getUserFull(currentUser.id), getAccountInstance());
+                        showCallOptionsMenu(id == video_call);
                     }
                 } else if (id == text_bold) {
                     if (chatActivityEnterView != null && chatActivityEnterView.getEditField() != null) {
@@ -44512,7 +44513,7 @@ public class ChatActivity extends BaseFragment implements
     
     private ActionBarMenuItem.Item encryptedMessagesMenuItem;
     
-    private void updateEncryptedMessagesMenuItem() {
+    public void updateEncryptedMessagesMenuItem() {
         if (headerItem == null) return;
         
         EncryptedMessagesManager encManager = EncryptedMessagesManager.getInstance();
@@ -44532,7 +44533,63 @@ public class ChatActivity extends BaseFragment implements
         }
     }
     
-    private void showEncryptedMessagesDialog() {
+    private void showCallOptionsMenu(boolean isVideoCall) {
+        if (getParentActivity() == null || currentUser == null) return;
+        
+        EncryptedCallsManager callsManager = EncryptedCallsManager.getInstance();
+        boolean hasEncryption = callsManager.hasOutgoingPassword();
+        
+        AlertDialog.Builder builder = new AlertDialog.Builder(getParentActivity());
+        builder.setTitle(isVideoCall ? LocaleController.getString("VideoCall", R.string.VideoCall) : LocaleController.getString("Call", R.string.Call));
+        
+        ArrayList<CharSequence> items = new ArrayList<>();
+        ArrayList<Integer> icons = new ArrayList<>();
+        ArrayList<Integer> actions = new ArrayList<>();
+        
+        // Regular call
+        String regularLabel = (isVideoCall ? "📹 " : "📞 ") + 
+            (isVideoCall ? LocaleController.getString("VideoCall", R.string.VideoCall) : LocaleController.getString("Call", R.string.Call));
+        items.add(regularLabel);
+        icons.add(isVideoCall ? R.drawable.msg_videocall : R.drawable.msg_calls);
+        actions.add(0); // action: regular call
+        
+        // Encrypted call
+        String encryptedLabel = "🔒 " + LocaleController.getString("EncryptedCallMenu", R.string.EncryptedCallMenu);
+        items.add(encryptedLabel);
+        icons.add(R.drawable.msg_secret);
+        actions.add(1); // action: encrypted call
+        
+        builder.setItems(items.toArray(new CharSequence[0]), (dialog, which) -> {
+            int action = actions.get(which);
+            if (action == 0) {
+                // Regular call - no encryption
+                callsManager.setCallEncryptionEnabled(false);
+                VoIPHelper.startCall(currentUser, isVideoCall, userInfo != null && userInfo.video_calls_available, 
+                    getParentActivity(), getMessagesController().getUserFull(currentUser.id), getAccountInstance());
+            } else if (action == 1) {
+                // Encrypted call
+                if (!hasEncryption) {
+                    // Show message that encryption needs to be configured
+                    AlertDialog.Builder msgBuilder = new AlertDialog.Builder(getParentActivity());
+                    msgBuilder.setTitle(LocaleController.getString("EncryptedCall", R.string.EncryptedCall));
+                    msgBuilder.setMessage(LocaleController.getString("EncryptedCallNeedsSetup", R.string.EncryptedCallNeedsSetup));
+                    msgBuilder.setPositiveButton(LocaleController.getString("Settings", R.string.Settings), (d, w) -> {
+                        presentFragment(new HiddenChatsActivity());
+                    });
+                    msgBuilder.setNegativeButton(LocaleController.getString("Cancel", R.string.Cancel), null);
+                    showDialog(msgBuilder.create());
+                } else {
+                    callsManager.setCallEncryptionEnabled(true);
+                    VoIPHelper.startCall(currentUser, isVideoCall, userInfo != null && userInfo.video_calls_available, 
+                        getParentActivity(), getMessagesController().getUserFull(currentUser.id), getAccountInstance());
+                }
+            }
+        });
+        
+        showDialog(builder.create());
+    }
+    
+    public void showEncryptedMessagesDialog() {
         if (getParentActivity() == null) return;
         
         HiddenChatsManager hiddenManager = HiddenChatsManager.getInstance();
@@ -44717,6 +44774,7 @@ public class ChatActivity extends BaseFragment implements
         if (getParentActivity() == null) return;
         
         EncryptedMessagesManager encManager = EncryptedMessagesManager.getInstance();
+        EncryptedCallsManager callsManager = EncryptedCallsManager.getInstance();
         boolean isChangingPassword = encManager.isEncryptionEnabled(dialog_id);
         
         AlertDialog.Builder builder = new AlertDialog.Builder(getParentActivity());
@@ -44748,6 +44806,35 @@ public class ChatActivity extends BaseFragment implements
         passwordField.setHint(LocaleController.getString("Password", R.string.Password));
         layout.addView(passwordField, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, 48));
         
+        // Add encryption type selector
+        TextView encTypeLabel = new TextView(getParentActivity());
+        encTypeLabel.setText(LocaleController.getString("EncryptionAlgorithm", R.string.EncryptionAlgorithm));
+        encTypeLabel.setTextSize(android.util.TypedValue.COMPLEX_UNIT_DIP, 14);
+        encTypeLabel.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteGrayText));
+        encTypeLabel.setPadding(0, AndroidUtilities.dp(16), 0, AndroidUtilities.dp(4));
+        layout.addView(encTypeLabel, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
+        
+        final int[] selectedType = {callsManager.getDefaultEncryptionType()};
+        String[] encTypes = {"🔒 AES-256", "🔑 ГОСТ 28147"};
+        
+        android.widget.RadioGroup radioGroup = new android.widget.RadioGroup(getParentActivity());
+        radioGroup.setOrientation(android.widget.RadioGroup.VERTICAL);
+        
+        for (int i = 0; i < encTypes.length; i++) {
+            android.widget.RadioButton rb = new android.widget.RadioButton(getParentActivity());
+            rb.setText(encTypes[i]);
+            rb.setTextSize(android.util.TypedValue.COMPLEX_UNIT_DIP, 16);
+            rb.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText));
+            rb.setId(i);
+            rb.setPadding(AndroidUtilities.dp(8), AndroidUtilities.dp(4), 0, AndroidUtilities.dp(4));
+            radioGroup.addView(rb);
+            if (i == selectedType[0]) {
+                rb.setChecked(true);
+            }
+        }
+        radioGroup.setOnCheckedChangeListener((group, checkedId) -> selectedType[0] = checkedId);
+        layout.addView(radioGroup, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, LayoutHelper.WRAP_CONTENT));
+        
         builder.setView(layout);
         
         builder.setPositiveButton(LocaleController.getString("Set", R.string.Set), (dialog, which) -> {
@@ -44756,7 +44843,7 @@ public class ChatActivity extends BaseFragment implements
                 return;
             }
             
-            encManager.setChatPassword(dialog_id, password);
+            encManager.setChatPassword(dialog_id, password, selectedType[0]);
             updateEncryptedMessagesMenuItem();
             
             // Reload chat to decrypt existing messages with new password

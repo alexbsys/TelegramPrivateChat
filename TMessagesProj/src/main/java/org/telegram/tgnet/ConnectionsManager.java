@@ -285,7 +285,8 @@ public class ConnectionsManager extends BaseController {
         if (preferences.contains("pushConnection")) {
             return preferences.getBoolean("pushConnection", true);
         } else {
-            return MessagesController.getMainSettings(UserConfig.selectedAccount).getBoolean("backgroundConnection", false);
+            // Default to true for CipherGram to ensure push notifications work in background
+            return MessagesController.getMainSettings(UserConfig.selectedAccount).getBoolean("backgroundConnection", true);
         }
     }
 

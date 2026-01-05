@@ -15,10 +15,13 @@ import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.Map;
+
+import org.telegram.tgnet.TLRPC;
 
 import javax.crypto.Cipher;
 import javax.crypto.SecretKey;
@@ -41,10 +44,15 @@ public class EncryptedMessagesManager {
 
     // Map of dialogId -> encryption password
     private Map<Long, String> chatPasswords = new HashMap<>();
+    // Map of dialogId -> encryption type (0=AES-256, 1=GOST 28147)
+    private Map<Long, Integer> chatEncryptionTypes = new HashMap<>();
     private String cachedProtectedZonePassword = null;
     private boolean isLoaded = false;
     private boolean userDeclinedPassword = false; // Don't ask again if user declined
     private boolean isDecoyMode = false; // True if decoy password was entered
+    
+    // Message encryption type prefixes
+    private static final String GOST_PREFIX = "🔑GOST:"; // GOST encrypted messages (key emoji)
     
     // Cache for recent encrypted messages to detect duplicates (per dialogId)
     // Key: dialogId, Value: Map of encrypted text -> first message id that had it
@@ -104,6 +112,14 @@ public class EncryptedMessagesManager {
      */
     public boolean isPasswordCached() {
         return cachedProtectedZonePassword != null;
+    }
+    
+    /**
+     * Get cached Protected Zone password for encrypted message operations
+     * @return cached password or null if not cached
+     */
+    public String getCachedPassword() {
+        return cachedProtectedZonePassword;
     }
     
     /**
@@ -284,11 +300,25 @@ public class EncryptedMessagesManager {
         return isLoaded;
     }
 
+    // Temporary encryption toggle (without removing password)
+    private java.util.Set<Long> temporarilyDisabledChats = new java.util.HashSet<>();
+    
     /**
      * Check if encryption is enabled for a chat
      */
     public boolean isEncryptionEnabled(long dialogId) {
-        return chatPasswords.containsKey(dialogId);
+        return chatPasswords.containsKey(dialogId) && !temporarilyDisabledChats.contains(dialogId);
+    }
+    
+    /**
+     * Temporarily enable/disable encryption for a chat (without removing password)
+     */
+    public void setEncryptionEnabled(long dialogId, boolean enabled) {
+        if (enabled) {
+            temporarilyDisabledChats.remove(dialogId);
+        } else {
+            temporarilyDisabledChats.add(dialogId);
+        }
     }
 
     /**
@@ -304,11 +334,44 @@ public class EncryptedMessagesManager {
     public void setChatPassword(long dialogId, String password) {
         if (password == null || password.isEmpty()) {
             chatPasswords.remove(dialogId);
+            chatEncryptionTypes.remove(dialogId);
         } else {
             chatPasswords.put(dialogId, password);
         }
         saveConfig();
         updateHasEncryptedChatsFlag();
+    }
+    
+    /**
+     * Set encryption password and type for a chat
+     * @param encryptionType 0=AES-256, 1=GOST 28147
+     */
+    public void setChatPassword(long dialogId, String password, int encryptionType) {
+        if (password == null || password.isEmpty()) {
+            chatPasswords.remove(dialogId);
+            chatEncryptionTypes.remove(dialogId);
+        } else {
+            chatPasswords.put(dialogId, password);
+            chatEncryptionTypes.put(dialogId, encryptionType);
+        }
+        saveConfig();
+        updateHasEncryptedChatsFlag();
+    }
+    
+    /**
+     * Get encryption type for a chat (0=AES-256, 1=GOST 28147)
+     */
+    public int getChatEncryptionType(long dialogId) {
+        Integer type = chatEncryptionTypes.get(dialogId);
+        return type != null ? type : 0; // Default to AES-256
+    }
+    
+    /**
+     * Set encryption type for a chat
+     */
+    public void setChatEncryptionType(long dialogId, int type) {
+        chatEncryptionTypes.put(dialogId, type);
+        saveConfig();
     }
 
     /**
@@ -328,9 +391,17 @@ public class EncryptedMessagesManager {
     }
 
     /**
-     * Encrypt a message text
+     * Encrypt a message text with default encryption type (AES-256)
      */
     public String encryptMessage(String plainText, String password) {
+        return encryptMessage(plainText, password, 0);
+    }
+    
+    /**
+     * Encrypt a message text with specified encryption type
+     * @param encryptionType 0=AES-256, 1=GOST 28147
+     */
+    public String encryptMessage(String plainText, String password, int encryptionType) {
         try {
             byte[] salt = new byte[SALT_LENGTH];
             byte[] iv = new byte[IV_LENGTH];
@@ -351,8 +422,9 @@ public class EncryptedMessagesManager {
             System.arraycopy(iv, 0, combined, salt.length, iv.length);
             System.arraycopy(encrypted, 0, combined, salt.length + iv.length, encrypted.length);
 
-            // Return with prefix
-            return MESSAGE_PREFIX + Base64.encodeToString(combined, Base64.NO_WRAP);
+            // Return with prefix based on encryption type
+            String prefix = (encryptionType == 1) ? GOST_PREFIX : MESSAGE_PREFIX;
+            return prefix + Base64.encodeToString(combined, Base64.NO_WRAP);
         } catch (Exception e) {
             FileLog.e(e);
             return null;
@@ -369,7 +441,13 @@ public class EncryptedMessagesManager {
         }
         
         try {
-            String base64Part = encryptedText.substring(MESSAGE_PREFIX.length());
+            // Determine prefix and get base64 part
+            String base64Part;
+            if (encryptedText.startsWith(GOST_PREFIX)) {
+                base64Part = encryptedText.substring(GOST_PREFIX.length());
+            } else {
+                base64Part = encryptedText.substring(MESSAGE_PREFIX.length());
+            }
             byte[] combined = Base64.decode(base64Part, Base64.NO_WRAP);
             
             if (combined.length < SALT_LENGTH + IV_LENGTH) {
@@ -397,10 +475,17 @@ public class EncryptedMessagesManager {
     }
 
     /**
-     * Check if message is encrypted
+     * Check if message is encrypted (AES or GOST)
      */
     public boolean isEncryptedMessage(String text) {
-        return text != null && text.startsWith(MESSAGE_PREFIX);
+        return text != null && (text.startsWith(MESSAGE_PREFIX) || text.startsWith(GOST_PREFIX));
+    }
+    
+    /**
+     * Check if message is GOST encrypted
+     */
+    public boolean isGostEncryptedMessage(String text) {
+        return text != null && text.startsWith(GOST_PREFIX);
     }
 
     /**
@@ -518,6 +603,243 @@ public class EncryptedMessagesManager {
      */
     public boolean isDuplicateDetectionEnabled() {
         return getDuplicateDetectionCount() > 0;
+    }
+    
+    // ============= Encrypted Search Settings =============
+    
+    private static final String PREF_ENCRYPTED_SEARCH_LIMIT = "encrypted_search_limit";
+    private static final int DEFAULT_ENCRYPTED_SEARCH_LIMIT = 500;
+    
+    /**
+     * Get encrypted message search limit
+     * @return number of messages to search, 0 = disabled
+     */
+    public int getEncryptedSearchLimit() {
+        return ApplicationLoader.applicationContext
+            .getSharedPreferences("encryptedMessagesPrefs", android.content.Context.MODE_PRIVATE)
+            .getInt(PREF_ENCRYPTED_SEARCH_LIMIT, DEFAULT_ENCRYPTED_SEARCH_LIMIT);
+    }
+    
+    /**
+     * Set encrypted message search limit
+     * @param limit number of messages to search, 0 = disabled, -1 = unlimited
+     */
+    public void setEncryptedSearchLimit(int limit) {
+        ApplicationLoader.applicationContext
+            .getSharedPreferences("encryptedMessagesPrefs", android.content.Context.MODE_PRIVATE)
+            .edit()
+            .putInt(PREF_ENCRYPTED_SEARCH_LIMIT, limit)
+            .apply();
+    }
+    
+    /**
+     * Check if encrypted search is enabled
+     */
+    public boolean isEncryptedSearchEnabled() {
+        return getEncryptedSearchLimit() != 0;
+    }
+    
+    /**
+     * Search encrypted messages in a dialog
+     * @param dialogId dialog to search
+     * @param query search query (will be matched against decrypted text)
+     * @param password decryption password
+     * @param callback called with list of matching message IDs
+     */
+    public void searchEncryptedMessages(long dialogId, String query, String password, 
+            java.util.function.Consumer<ArrayList<Integer>> callback) {
+        int limit = getEncryptedSearchLimit();
+        if (limit == 0 || query == null || query.isEmpty() || password == null) {
+            callback.accept(new ArrayList<>());
+            return;
+        }
+        
+        Utilities.searchQueue.postRunnable(() -> {
+            ArrayList<Integer> results = new ArrayList<>();
+            String queryLower = query.toLowerCase();
+            
+            try {
+                // Get messages from MessagesStorage
+                MessagesStorage storage = MessagesStorage.getInstance(UserConfig.selectedAccount);
+                ArrayList<MessageObject> messages = new ArrayList<>();
+                
+                // Query last N messages from this dialog (limit < 0 means unlimited)
+                final int sqlLimit = limit;
+                storage.getStorageQueue().postRunnable(() -> {
+                    try {
+                        org.telegram.SQLite.SQLiteCursor cursor;
+                        if (sqlLimit < 0) {
+                            // Unlimited - no LIMIT clause
+                            cursor = storage.getDatabase().queryFinalized(
+                                "SELECT data, mid FROM messages_v2 WHERE uid = ? ORDER BY mid DESC",
+                                dialogId);
+                        } else {
+                            cursor = storage.getDatabase().queryFinalized(
+                                "SELECT data, mid FROM messages_v2 WHERE uid = ? ORDER BY mid DESC LIMIT ?",
+                                dialogId, sqlLimit);
+                        }
+                        
+                        ArrayList<Integer> matchingIds = new ArrayList<>();
+                        
+                        while (cursor.next()) {
+                            org.telegram.tgnet.NativeByteBuffer data = cursor.byteBufferValue(0);
+                            int messageId = cursor.intValue(1);
+                            
+                            if (data != null) {
+                                TLRPC.Message message = TLRPC.Message.TLdeserialize(data, data.readInt32(false), false);
+                                data.reuse();
+                                
+                                if (message != null && message.message != null && isEncryptedMessage(message.message)) {
+                                    String decrypted = decryptMessage(message.message, password);
+                                    if (decrypted != null && decrypted.toLowerCase().contains(queryLower)) {
+                                        matchingIds.add(messageId);
+                                    }
+                                }
+                            }
+                        }
+                        cursor.dispose();
+                        
+                        AndroidUtilities.runOnUIThread(() -> callback.accept(matchingIds));
+                    } catch (Exception e) {
+                        FileLog.e(e);
+                        AndroidUtilities.runOnUIThread(() -> callback.accept(new ArrayList<>()));
+                    }
+                });
+            } catch (Exception e) {
+                FileLog.e(e);
+                callback.accept(new ArrayList<>());
+            }
+        });
+    }
+    
+    // Active search task for cancellation
+    private volatile boolean searchCancelled = false;
+    private volatile long currentSearchDialogId = 0;
+    
+    /**
+     * Cancel ongoing encrypted message search
+     */
+    public void cancelEncryptedSearch() {
+        searchCancelled = true;
+    }
+    
+    /**
+     * Check if chat has encrypted messages (optimization to skip search)
+     */
+    public boolean chatHasEncryptedMessages(long dialogId) {
+        return chatPasswords.containsKey(dialogId);
+    }
+    
+    /**
+     * Search encrypted messages and return MessageObjects incrementally
+     * @param dialogId dialog to search
+     * @param query search query (will be matched against decrypted text)
+     * @param protectedZonePassword Protected Zone password (used to load chat passwords if needed)
+     * @param currentAccount account id
+     * @param callback called with list of matching MessageObjects (called multiple times for incremental results)
+     */
+    public void searchEncryptedMessagesWithObjects(long dialogId, String query, String protectedZonePassword, 
+            int currentAccount, java.util.function.Consumer<ArrayList<MessageObject>> callback) {
+        int limit = getEncryptedSearchLimit();
+        if (limit == 0 || query == null || query.isEmpty()) {
+            callback.accept(new ArrayList<>());
+            return;
+        }
+        
+        // Check if this chat has encrypted messages at all
+        if (!chatHasEncryptedMessages(dialogId)) {
+            FileLog.d("EncryptedMessagesManager: Chat " + dialogId + " has no encrypted messages, skipping search");
+            callback.accept(new ArrayList<>());
+            return;
+        }
+        
+        // Get the CHAT-SPECIFIC password for decryption (not Protected Zone password!)
+        String chatPassword = getChatPassword(dialogId);
+        if (chatPassword == null || chatPassword.isEmpty()) {
+            FileLog.d("EncryptedMessagesManager: No password for chat " + dialogId);
+            callback.accept(new ArrayList<>());
+            return;
+        }
+        
+        // Reset cancellation flag and set current search dialog
+        searchCancelled = false;
+        currentSearchDialogId = dialogId;
+        
+        String queryLower = query.toLowerCase();
+        
+        // Get messages from MessagesStorage
+        MessagesStorage storage = MessagesStorage.getInstance(currentAccount);
+        
+        // Query last N messages from this dialog (limit < 0 means unlimited)
+        final int sqlLimit = limit;
+        final String finalChatPassword = chatPassword;
+        
+        storage.getStorageQueue().postRunnable(() -> {
+            ArrayList<MessageObject> matchingMessages = new ArrayList<>();
+            int processedCount = 0;
+            int batchSize = 10; // Send results every N matches for responsiveness
+            
+            try {
+                org.telegram.SQLite.SQLiteCursor cursor;
+                if (sqlLimit < 0) {
+                    // Unlimited - no LIMIT clause
+                    cursor = storage.getDatabase().queryFinalized(
+                        "SELECT data, mid FROM messages_v2 WHERE uid = ? ORDER BY mid DESC",
+                        dialogId);
+                } else {
+                    cursor = storage.getDatabase().queryFinalized(
+                        "SELECT data, mid FROM messages_v2 WHERE uid = ? ORDER BY mid DESC LIMIT ?",
+                        dialogId, sqlLimit);
+                }
+                
+                while (cursor.next()) {
+                    // Check for cancellation
+                    if (searchCancelled || currentSearchDialogId != dialogId) {
+                        FileLog.d("EncryptedMessagesManager: Search cancelled for dialog " + dialogId);
+                        cursor.dispose();
+                        return;
+                    }
+                    
+                    org.telegram.tgnet.NativeByteBuffer data = cursor.byteBufferValue(0);
+                    int messageId = cursor.intValue(1);
+                    
+                    if (data != null) {
+                        TLRPC.Message message = TLRPC.Message.TLdeserialize(data, data.readInt32(false), false);
+                        data.reuse();
+                        
+                        if (message != null && message.message != null && isEncryptedMessage(message.message)) {
+                            // Use CHAT password, not Protected Zone password!
+                            String decrypted = decryptMessage(message.message, finalChatPassword);
+                            if (decrypted != null && decrypted.toLowerCase().contains(queryLower)) {
+                                MessageObject mo = new MessageObject(currentAccount, message, false, true);
+                                matchingMessages.add(mo);
+                                
+                                // Send incremental results every batchSize matches
+                                if (matchingMessages.size() % batchSize == 0) {
+                                    ArrayList<MessageObject> batch = new ArrayList<>(matchingMessages);
+                                    AndroidUtilities.runOnUIThread(() -> callback.accept(batch));
+                                }
+                            }
+                        }
+                    }
+                    processedCount++;
+                }
+                cursor.dispose();
+                
+                // Send final results
+                if (!searchCancelled && currentSearchDialogId == dialogId) {
+                    ArrayList<MessageObject> finalResults = new ArrayList<>(matchingMessages);
+                    AndroidUtilities.runOnUIThread(() -> callback.accept(finalResults));
+                }
+                
+                FileLog.d("EncryptedMessagesManager: Search completed, processed " + processedCount + 
+                    " messages, found " + matchingMessages.size() + " matches");
+                
+            } catch (Exception e) {
+                FileLog.e(e);
+                AndroidUtilities.runOnUIThread(() -> callback.accept(new ArrayList<>()));
+            }
+        });
     }
 }
 

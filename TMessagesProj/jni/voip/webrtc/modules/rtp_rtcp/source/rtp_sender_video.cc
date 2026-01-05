@@ -745,6 +745,7 @@ bool RTPSenderVideo::SendVideo(int payload_type,
 
   TRACE_EVENT_ASYNC_END1("webrtc", "Video", capture_time.ms_or(0), "timestamp",
                          rtp_timestamp);
+
   return true;
 }
 

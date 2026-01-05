@@ -24,6 +24,7 @@
 
 #include "ReflectorPort.h"
 #include "FieldTrialsConfig.h"
+#include "../CustomFrameEncryption.h"
 
 namespace tgcalls {
 
@@ -110,7 +111,19 @@ public:
         }
         
         rtc::CopyOnWriteBuffer buffer;
-        buffer.AppendData(data, len);
+        
+        // Apply custom frame encryption if outgoing key is set
+        auto& customEncryption = CustomFrameEncryption::getInstance();
+        if (customEncryption.hasOutgoingKey()) {
+            auto encrypted = customEncryption.encryptFrame(reinterpret_cast<const uint8_t*>(data), len);
+            if (!encrypted.empty()) {
+                buffer.AppendData(encrypted.data(), encrypted.size());
+            } else {
+                buffer.AppendData(data, len);
+            }
+        } else {
+            buffer.AppendData(data, len);
+        }
         
         Message message = flags == 0 ? Message { AudioDataMessage { buffer } } : Message { VideoDataMessage { buffer } };
         
@@ -340,12 +353,35 @@ private:
     void handleIncomingMessage(DecryptedMessage const &message) {
         const auto data = &message.message.data;
         if (const auto dataMessage = absl::get_if<AudioDataMessage>(data)) {
-            SignalReadPacket(this, reinterpret_cast<const char *>(dataMessage->data.data()), dataMessage->data.size(), rtc::TimeMicros(), 0);
+            processDecryptedData(dataMessage->data, 0);
         } else if (const auto dataMessage = absl::get_if<VideoDataMessage>(data)) {
-            SignalReadPacket(this, reinterpret_cast<const char *>(dataMessage->data.data()), dataMessage->data.size(), rtc::TimeMicros(), 1);
+            processDecryptedData(dataMessage->data, 1);
         } else {
             RTC_LOG(LS_INFO) << "DirectPacketTransport: unknown incoming message";
         }
+    }
+    
+    void processDecryptedData(const rtc::CopyOnWriteBuffer &buffer, int flags) {
+        // Apply custom frame decryption if the packet is encrypted
+        auto& customEncryption = CustomFrameEncryption::getInstance();
+        
+        if (customEncryption.isEncryptedFrame(buffer.data(), buffer.size())) {
+            bool decrypted = false;
+            bool wasEncrypted = false;
+            auto decryptedData = customEncryption.decryptFrame(buffer.data(), buffer.size(), decrypted, wasEncrypted);
+            
+            if (wasEncrypted && !decrypted) {
+                // Encrypted but couldn't decrypt - drop packet
+                return;
+            }
+            
+            if (!decryptedData.empty()) {
+                SignalReadPacket(this, reinterpret_cast<const char *>(decryptedData.data()), decryptedData.size(), rtc::TimeMicros(), flags);
+                return;
+            }
+        }
+        
+        SignalReadPacket(this, reinterpret_cast<const char *>(buffer.data()), buffer.size(), rtc::TimeMicros(), flags);
     }
     
 private:

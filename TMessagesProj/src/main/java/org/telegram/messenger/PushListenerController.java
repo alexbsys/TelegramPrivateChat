@@ -15,6 +15,7 @@ import androidx.collection.LongSparseArray;
 import com.google.android.gms.common.ConnectionResult;
 import com.google.android.gms.common.GoogleApiAvailability;
 import com.google.firebase.FirebaseApp;
+import com.google.firebase.analytics.FirebaseAnalytics;
 import com.google.firebase.messaging.FirebaseMessaging;
 
 import org.json.JSONArray;
@@ -457,6 +458,10 @@ public class PushListenerController {
                                     args = new String[loc_args.length()];
                                     for (int a = 0; a < args.length; a++) {
                                         args[a] = loc_args.getString(a);
+                                        // Check if message text is encrypted and replace with placeholder
+                                        if (a >= 1 && args[a] != null && EncryptedMessagesManager.getInstance().isEncryptedMessage(args[a])) {
+                                            args[a] = "🔒 " + LocaleController.getString("EncryptedMessage", R.string.EncryptedMessage);
+                                        }
                                     }
                                 } else {
                                     args = null;
@@ -1359,10 +1364,27 @@ public class PushListenerController {
                                         case "LOCKED_MESSAGE":
                                         case "ENCRYPTION_REQUEST":
                                         case "ENCRYPTION_ACCEPT":
-                                        case "PHONE_CALL_REQUEST":
                                         case "MESSAGE_MUTED":
                                         case "PHONE_CALL_MISSED": {
                                             //ignored
+                                            break;
+                                        }
+                                        case "PHONE_CALL_REQUEST": {
+                                            // CipherGram: Wake up connection to receive the call update
+                                            if (BuildVars.LOGS_ENABLED) {
+                                                FileLog.d("PHONE_CALL_REQUEST push received, waking up connection");
+                                            }
+                                            final int accountToWake = currentAccount;
+                                            AndroidUtilities.runOnUIThread(() -> {
+                                                try {
+                                                    // Resume push connection
+                                                    ConnectionsManager.getInstance(accountToWake).resumeNetworkMaybe();
+                                                    // Force fetch pending updates which will include the call
+                                                    MessagesController.getInstance(accountToWake).getDifference();
+                                                } catch (Exception e) {
+                                                    FileLog.e("Error waking up for call", e);
+                                                }
+                                            });
                                             break;
                                         }
 
@@ -1673,6 +1695,7 @@ public class PushListenerController {
                                     PushListenerController.sendRegistrationToServer(getPushType(), token);
                                 }
                             });
+                    FirebaseAnalytics.getInstance(ApplicationLoader.applicationContext).logEvent("app_start", null);
                 } catch (Throwable e) {
                     FileLog.e(e);
                 }

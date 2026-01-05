@@ -32,6 +32,54 @@ public class CallSettingsManager {
     private boolean useCallServer = false; // If true, fetch TURN servers from call server instead of manual
     private String callServerUrl = ""; // URL of the call manager server
     
+    // Video codec preference
+    public static final int VIDEO_CODEC_AUTO = 0;
+    public static final int VIDEO_CODEC_H264 = 1;
+    public static final int VIDEO_CODEC_H265 = 2;
+    private int preferredVideoCodec = VIDEO_CODEC_AUTO;
+    
+    // Debug info overlay
+    private boolean showDebugInfo = false;
+    
+    // Call control lists
+    private List<Long> blacklist = new ArrayList<>(); // User IDs to auto-reject
+    private boolean whitelistEnabled = false;
+    private List<Long> whitelist = new ArrayList<>(); // If enabled, only accept calls from these users
+    private List<AutoAnswerEntry> autoAnswerList = new ArrayList<>(); // Auto-answer settings per user
+    
+    public static final int AUTO_ANSWER_AUDIO_ONLY = 0;
+    public static final int AUTO_ANSWER_AUDIO_VIDEO = 1;
+    
+    public static class AutoAnswerEntry {
+        public long userId;
+        public int mode; // AUTO_ANSWER_AUDIO_ONLY or AUTO_ANSWER_AUDIO_VIDEO
+        
+        public AutoAnswerEntry() {}
+        
+        public AutoAnswerEntry(long userId, int mode) {
+            this.userId = userId;
+            this.mode = mode;
+        }
+        
+        public JSONObject toJson() {
+            try {
+                JSONObject obj = new JSONObject();
+                obj.put("user_id", userId);
+                obj.put("mode", mode);
+                return obj;
+            } catch (Exception e) {
+                return new JSONObject();
+            }
+        }
+        
+        public static AutoAnswerEntry fromJson(JSONObject obj) {
+            AutoAnswerEntry entry = new AutoAnswerEntry();
+            entry.userId = obj.optLong("user_id", 0);
+            entry.mode = obj.optInt("mode", AUTO_ANSWER_AUDIO_ONLY);
+            return entry;
+        }
+    }
+    
     public static final int SERVER_TYPE_TURN = 0;
     public static final int SERVER_TYPE_STUN = 1;
     
@@ -153,6 +201,37 @@ public class CallSettingsManager {
             disableP2P = json.optBoolean("disable_p2p", false);
             useCallServer = json.optBoolean("use_call_server", false);
             callServerUrl = json.optString("call_server_url", "");
+            preferredVideoCodec = json.optInt("preferred_video_codec", VIDEO_CODEC_AUTO);
+            showDebugInfo = json.optBoolean("show_debug_info", false);
+            
+            // Load blacklist
+            blacklist.clear();
+            JSONArray blacklistArray = json.optJSONArray("blacklist");
+            if (blacklistArray != null) {
+                for (int i = 0; i < blacklistArray.length(); i++) {
+                    blacklist.add(blacklistArray.getLong(i));
+                }
+            }
+            
+            // Load whitelist
+            whitelistEnabled = json.optBoolean("whitelist_enabled", false);
+            whitelist.clear();
+            JSONArray whitelistArray = json.optJSONArray("whitelist");
+            if (whitelistArray != null) {
+                for (int i = 0; i < whitelistArray.length(); i++) {
+                    whitelist.add(whitelistArray.getLong(i));
+                }
+            }
+            
+            // Load auto-answer list
+            autoAnswerList.clear();
+            JSONArray autoAnswerArray = json.optJSONArray("auto_answer");
+            if (autoAnswerArray != null) {
+                for (int i = 0; i < autoAnswerArray.length(); i++) {
+                    JSONObject entryJson = autoAnswerArray.getJSONObject(i);
+                    autoAnswerList.add(AutoAnswerEntry.fromJson(entryJson));
+                }
+            }
             
             customTurnServers.clear();
             JSONArray serversArray = json.optJSONArray("turn_servers");
@@ -176,6 +255,30 @@ public class CallSettingsManager {
             json.put("disable_p2p", disableP2P);
             json.put("use_call_server", useCallServer);
             json.put("call_server_url", callServerUrl);
+            json.put("preferred_video_codec", preferredVideoCodec);
+            json.put("show_debug_info", showDebugInfo);
+            
+            // Save blacklist
+            JSONArray blacklistArray = new JSONArray();
+            for (Long userId : blacklist) {
+                blacklistArray.put(userId);
+            }
+            json.put("blacklist", blacklistArray);
+            
+            // Save whitelist
+            json.put("whitelist_enabled", whitelistEnabled);
+            JSONArray whitelistArray = new JSONArray();
+            for (Long userId : whitelist) {
+                whitelistArray.put(userId);
+            }
+            json.put("whitelist", whitelistArray);
+            
+            // Save auto-answer list
+            JSONArray autoAnswerArray = new JSONArray();
+            for (AutoAnswerEntry entry : autoAnswerList) {
+                autoAnswerArray.put(entry.toJson());
+            }
+            json.put("auto_answer", autoAnswerArray);
             
             JSONArray serversArray = new JSONArray();
             for (TurnServer server : customTurnServers) {
@@ -268,6 +371,32 @@ public class CallSettingsManager {
         saveSettings();
     }
     
+    public int getPreferredVideoCodec() {
+        return preferredVideoCodec;
+    }
+    
+    public void setPreferredVideoCodec(int codec) {
+        this.preferredVideoCodec = codec;
+        saveSettings();
+    }
+    
+    public String getVideoCodecName() {
+        switch (preferredVideoCodec) {
+            case VIDEO_CODEC_H264: return "H.264";
+            case VIDEO_CODEC_H265: return "H.265";
+            default: return "Auto";
+        }
+    }
+    
+    public boolean isShowDebugInfo() {
+        return showDebugInfo;
+    }
+    
+    public void setShowDebugInfo(boolean show) {
+        this.showDebugInfo = show;
+        saveSettings();
+    }
+    
     public List<TurnServer> getCustomTurnServers() {
         return new ArrayList<>(customTurnServers);
     }
@@ -312,8 +441,132 @@ public class CallSettingsManager {
         return !getEnabledTurnServers().isEmpty();
     }
     
+    // Blacklist methods
+    
+    public List<Long> getBlacklist() {
+        return new ArrayList<>(blacklist);
+    }
+    
+    public boolean isBlacklisted(long userId) {
+        return blacklist.contains(userId);
+    }
+    
+    public void addToBlacklist(long userId) {
+        if (!blacklist.contains(userId)) {
+            blacklist.add(userId);
+            saveSettings();
+        }
+    }
+    
+    public void removeFromBlacklist(long userId) {
+        if (blacklist.remove(userId)) {
+            saveSettings();
+        }
+    }
+    
+    // Whitelist methods
+    
+    public boolean isWhitelistEnabled() {
+        return whitelistEnabled;
+    }
+    
+    public void setWhitelistEnabled(boolean enabled) {
+        this.whitelistEnabled = enabled;
+        saveSettings();
+    }
+    
+    public List<Long> getWhitelist() {
+        return new ArrayList<>(whitelist);
+    }
+    
+    public boolean isWhitelisted(long userId) {
+        return whitelist.contains(userId);
+    }
+    
+    public void addToWhitelist(long userId) {
+        if (!whitelist.contains(userId)) {
+            whitelist.add(userId);
+            saveSettings();
+        }
+    }
+    
+    public void removeFromWhitelist(long userId) {
+        if (whitelist.remove(userId)) {
+            saveSettings();
+        }
+    }
+    
+    // Auto-answer methods
+    
+    public List<AutoAnswerEntry> getAutoAnswerList() {
+        return new ArrayList<>(autoAnswerList);
+    }
+    
+    public AutoAnswerEntry getAutoAnswerEntry(long userId) {
+        for (AutoAnswerEntry entry : autoAnswerList) {
+            if (entry.userId == userId) {
+                return entry;
+            }
+        }
+        return null;
+    }
+    
+    public boolean isAutoAnswer(long userId) {
+        return getAutoAnswerEntry(userId) != null;
+    }
+    
+    public void addAutoAnswer(long userId, int mode) {
+        AutoAnswerEntry existing = getAutoAnswerEntry(userId);
+        if (existing != null) {
+            existing.mode = mode;
+        } else {
+            autoAnswerList.add(new AutoAnswerEntry(userId, mode));
+        }
+        saveSettings();
+    }
+    
+    public void removeAutoAnswer(long userId) {
+        autoAnswerList.removeIf(entry -> entry.userId == userId);
+        saveSettings();
+    }
+    
+    /**
+     * Check if an incoming call should be rejected based on blacklist/whitelist settings
+     * @param userId The user ID of the caller
+     * @return true if the call should be rejected
+     */
+    public boolean shouldRejectCall(long userId) {
+        // First check blacklist
+        if (isBlacklisted(userId)) {
+            return true;
+        }
+        // Then check whitelist (if enabled)
+        if (whitelistEnabled && !isWhitelisted(userId)) {
+            return true;
+        }
+        return false;
+    }
+    
+    /**
+     * Check if a call should be auto-answered
+     * @param userId The user ID of the caller
+     * @param isVideoCall Whether the incoming call is a video call
+     * @return true if the call should be auto-answered
+     */
+    public boolean shouldAutoAnswer(long userId, boolean isVideoCall) {
+        AutoAnswerEntry entry = getAutoAnswerEntry(userId);
+        if (entry == null) {
+            return false;
+        }
+        // If audio-only mode is set, don't auto-answer video calls
+        if (entry.mode == AUTO_ANSWER_AUDIO_ONLY && isVideoCall) {
+            return false;
+        }
+        return true;
+    }
+    
     // Message prefix for sharing settings (emoji header + base64 encoded JSON)
-    public static final String SETTINGS_PREFIX = "📞🔧 CryptoGram Call Settings\n";
+    public static final String SETTINGS_PREFIX = "📞🔧 CipherGram Call Settings\n";
     public static final String SETTINGS_DATA_PREFIX = "DATA:";
     
     /**
@@ -351,7 +604,7 @@ public class CallSettingsManager {
      */
     public static boolean isCallSettingsMessage(String text) {
         if (text == null) return false;
-        return text.contains(SETTINGS_DATA_PREFIX) && text.contains("CryptoGram Call Settings");
+        return text.contains(SETTINGS_DATA_PREFIX) && (text.contains("CipherGram Call Settings") || text.contains("CryptoGram Call Settings"));
     }
     
     /**

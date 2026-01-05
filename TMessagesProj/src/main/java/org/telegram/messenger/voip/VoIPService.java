@@ -97,6 +97,7 @@ import org.telegram.messenger.AccountInstance;
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.ApplicationLoader;
 import org.telegram.messenger.CallSettingsManager;
+import org.telegram.messenger.EncryptedCallsManager;
 import org.telegram.messenger.BuildVars;
 import org.telegram.messenger.ChatObject;
 import org.telegram.messenger.ContactsController;
@@ -119,7 +120,6 @@ import org.telegram.messenger.UserObject;
 import org.telegram.messenger.Utilities;
 import org.telegram.messenger.XiaomiUtilities;
 import org.telegram.messenger.CallServerManager;
-import org.telegram.messenger.CallSettingsManager;
 import org.telegram.messenger.utils.tlutils.TlUtils;
 import org.telegram.tgnet.ConnectionsManager;
 import org.telegram.tgnet.SerializedData;
@@ -3513,7 +3513,18 @@ public class VoIPService extends Service implements SensorEventListener, AudioMa
 			final boolean forceWebRTC = callSettings.getEffectiveForceWebRTC();
 			final boolean useTcpForTurn = callSettings.getEffectiveUseTCP();
 			final boolean replaceStandard = callSettings.getEffectiveReplaceStandardServers();
-			final java.util.List<CallSettingsManager.TurnServer> customTurnServers = callSettings.getEnabledTurnServers();
+			
+			// Use servers from call server manager if available, otherwise use local settings
+			final java.util.List<CallSettingsManager.TurnServer> customTurnServers;
+			if (callServerTurnServers != null && !callServerTurnServers.isEmpty()) {
+				// Use servers from call server manager
+				customTurnServers = callServerTurnServers;
+				FileLog.d("VoIPService: Using " + callServerTurnServers.size() + " TURN servers from call server manager");
+			} else {
+				// Use local custom TURN servers
+				customTurnServers = callSettings.getEnabledTurnServers();
+				FileLog.d("VoIPService: Using " + customTurnServers.size() + " TURN servers from local settings");
+			}
 			final boolean hasCustomServers = !customTurnServers.isEmpty();
 			
 			// Build endpoints list
@@ -3556,6 +3567,8 @@ public class VoIPService extends Service implements SensorEventListener, AudioMa
 					if (server.isValid()) {
 						boolean isTurn = server.isTurn();
 						boolean isStun = server.isStun();
+						FileLog.d("VoIPService: Adding custom server: " + server.host + ":" + server.port + 
+							" (TURN=" + isTurn + ", STUN=" + isStun + ", TCP=" + (useTcpForTurn && isTurn) + ")");
 						Instance.Endpoint customEndpoint = new Instance.Endpoint(
 							true, // isRtc - WebRTC mode
 							customId++,
@@ -3573,6 +3586,7 @@ public class VoIPService extends Service implements SensorEventListener, AudioMa
 						endpointsList.add(customEndpoint);
 					}
 				}
+				FileLog.d("VoIPService: Total endpoints after adding custom servers: " + endpointsList.size());
 			}
 			
 			final Instance.Endpoint[] endpoints = endpointsList.toArray(new Instance.Endpoint[0]);
@@ -3619,6 +3633,10 @@ public class VoIPService extends Service implements SensorEventListener, AudioMa
 				}
 			}
 			// init
+			
+			// Setup custom frame encryption keys
+			setupCustomFrameEncryption();
+			
 			tgVoip[CAPTURE_DEVICE_CAMERA] = Instance.makeInstance(privateCall.protocol.library_versions.get(0), config, persistentStateFilePath, endpoints, proxy, getNetworkType(), encryptionKey, remoteSink[CAPTURE_DEVICE_CAMERA], captureDevice[CAPTURE_DEVICE_CAMERA], (uids, levels, voice) -> {
 				if (sharedInstance == null || privateCall == null) {
 					return;
@@ -3667,6 +3685,46 @@ public class VoIPService extends Service implements SensorEventListener, AudioMa
 		}
 	}
 
+	/**
+	 * Setup custom frame encryption keys for the call.
+	 * This method should be called before creating the VoIP instance.
+	 */
+	private void setupCustomFrameEncryption() {
+		try {
+			EncryptedCallsManager encryptedCallsManager = EncryptedCallsManager.getInstance();
+			encryptedCallsManager.resetCallStatus();
+			
+			// Clear any previous keys
+			NativeInstance.clearIncomingEncryptionKeys();
+			
+			// Set outgoing encryption key if enabled for this call
+			if (encryptedCallsManager.isCallEncryptionEnabled()) {
+				byte[] outgoingKey = encryptedCallsManager.getOutgoingDerivedKey();
+				if (outgoingKey != null && outgoingKey.length > 0) {
+					NativeInstance.setOutgoingEncryptionKey(outgoingKey);
+					NativeInstance.setOutgoingEncryptionType(encryptedCallsManager.getOutgoingEncryptionType());
+					FileLog.d("VoIPService: Outgoing call encryption enabled");
+				} else {
+					NativeInstance.setOutgoingEncryptionKey(null);
+					FileLog.d("VoIPService: Outgoing call encryption disabled (no key)");
+				}
+			} else {
+				NativeInstance.setOutgoingEncryptionKey(null);
+				FileLog.d("VoIPService: Outgoing call encryption disabled (user choice)");
+			}
+			
+			// Add all enabled incoming keys
+			java.util.List<byte[]> incomingKeys = encryptedCallsManager.getEnabledIncomingDerivedKeys();
+			for (byte[] key : incomingKeys) {
+				NativeInstance.addIncomingEncryptionKey(key);
+			}
+			FileLog.d("VoIPService: Added " + incomingKeys.size() + " incoming decryption keys");
+			
+		} catch (Exception e) {
+			FileLog.e("VoIPService: Error setting up custom frame encryption", e);
+		}
+	}
+	
 	public void playConnectedSound() {
 		Utilities.globalQueue.postRunnable(() -> soundPool.play(spVoiceChatStartId, 1.0f, 1.0f, 0, 0, 1));
 		playedConnectedSound = true;
@@ -4126,12 +4184,36 @@ public class VoIPService extends Service implements SensorEventListener, AudioMa
 	public String getDebugString() {
 		return tgVoip[CAPTURE_DEVICE_CAMERA] != null ? tgVoip[CAPTURE_DEVICE_CAMERA].getDebugInfo() : "";
 	}
+	
+	public Instance.TrafficStats getTrafficStats() {
+		return tgVoip[CAPTURE_DEVICE_CAMERA] != null ? tgVoip[CAPTURE_DEVICE_CAMERA].getTrafficStats() : null;
+	}
+	
+	/**
+	 * Returns custom traffic stats tracked by our encryptor/decryptor.
+	 * This works even when native TrafficStats returns zeros.
+	 * @return long array: [bytesSent, bytesReceived, audioBytesSent, audioBytesReceived] or null
+	 */
+	public long[] getCustomTrafficStats() {
+		try {
+			return NativeInstance.getCustomTrafficStats();
+		} catch (Exception e) {
+			return null;
+		}
+	}
 
 	public long getCallDuration() {
 		if (callStartTime == 0) {
 			return 0;
 		}
 		return SystemClock.elapsedRealtime() - callStartTime;
+	}
+	
+	/**
+	 * Get TURN servers fetched from call server manager (if any)
+	 */
+	public List<CallSettingsManager.TurnServer> getCallServerTurnServers() {
+		return callServerTurnServers;
 	}
 
 	public void stopRinging() {
@@ -4368,10 +4450,10 @@ public class VoIPService extends Service implements SensorEventListener, AudioMa
 		}
 		for (int a = 0; a < captureDevice.length; a++) {
 			if (captureDevice[a] != 0) {
-				if (destroyCaptureDevice[a]) {
-					NativeInstance.destroyVideoCapturer(captureDevice[a]);
-				}
+				// Always destroy camera on service destroy to prevent camera leak
+				NativeInstance.destroyVideoCapturer(captureDevice[a]);
 				captureDevice[a] = 0;
+				destroyCaptureDevice[a] = true;
 			}
 		}
 		cpuWakelock.release();
@@ -4468,6 +4550,39 @@ public class VoIPService extends Service implements SensorEventListener, AudioMa
 	}
 
 	public void acceptIncomingCall() {
+		// Check if we should fetch TURN servers from call server manager first
+		CallSettingsManager callSettings = CallSettingsManager.getInstance();
+		if (callSettings.isUseCallServer() && callServerTurnServers == null) {
+			String serverUrl = callSettings.getCallServerUrl();
+			if (serverUrl != null && !serverUrl.isEmpty()) {
+				// Fetch TURN servers, then continue with accepting the call
+				long callId = privateCall != null ? privateCall.id : System.currentTimeMillis();
+				CallServerManager.getInstance().fetchTurnServers(callId, new CallServerManager.TurnServersCallback() {
+					@Override
+					public void onSuccess(CallServerManager.TurnServersResponse response) {
+						callTariff = response.tariff;
+						freeMinutesRemaining = response.freeMinutesRemaining;
+						periodEnd = response.periodEnd;
+						callServerTurnServers = response.servers;
+						FileLog.d("VoIPService: Fetched " + response.servers.size() + " TURN servers for incoming call");
+						// Now continue accepting the call
+						AndroidUtilities.runOnUIThread(() -> doAcceptIncomingCall());
+					}
+					
+					@Override
+					public void onError(String errorHtml) {
+						FileLog.e("VoIPService: Failed to fetch TURN servers for incoming call: " + errorHtml);
+						// Continue without custom servers
+						AndroidUtilities.runOnUIThread(() -> doAcceptIncomingCall());
+					}
+				});
+				return;
+			}
+		}
+		doAcceptIncomingCall();
+	}
+	
+	private void doAcceptIncomingCall() {
 		updateCurrentForegroundType();
 		MessagesController.getInstance(currentAccount).ignoreSetOnline = false;
 		stopRinging();
@@ -4665,6 +4780,36 @@ public class VoIPService extends Service implements SensorEventListener, AudioMa
 		if (currentState == STATE_WAITING_INCOMING) {
 			return;
 		}
+		
+		// Check blacklist/whitelist/auto-answer
+		if (user != null) {
+			CallSettingsManager callSettings = CallSettingsManager.getInstance();
+			
+			// Check if call should be rejected (blacklist or whitelist)
+			if (callSettings.shouldRejectCall(user.id)) {
+				if (BuildVars.LOGS_ENABLED) {
+					FileLog.d("Call rejected due to blacklist/whitelist for user " + user.id);
+				}
+				declineIncomingCall(DISCARD_REASON_LINE_BUSY, null);
+				return;
+			}
+			
+			// Check if call should be auto-answered
+			boolean isVideoCall = privateCall != null && privateCall.video;
+			if (callSettings.shouldAutoAnswer(user.id, isVideoCall)) {
+				if (BuildVars.LOGS_ENABLED) {
+					FileLog.d("Auto-answering call from user " + user.id);
+				}
+				// Delay auto-answer slightly to ensure call is properly set up
+				AndroidUtilities.runOnUIThread(() -> {
+					if (currentState == STATE_WAITING_INCOMING || currentState == STATE_RINGING) {
+						acceptIncomingCall();
+					}
+				}, 500);
+				// Continue to show incoming call UI briefly before auto-answer
+			}
+		}
+		
 		if (USE_CONNECTION_SERVICE && systemCallConnection != null) {
 			systemCallConnection.setRinging();
 		}

@@ -1803,6 +1803,27 @@ public class MessageObject {
         localChannel = isChannel;
         localSupergroup = supergroup;
         localEdit = edit;
+        
+        // Decrypt encrypted messages for push notifications
+        if (messageText != null && EncryptedMessagesManager.getInstance().isEncryptedMessage(messageText.toString())) {
+            long dialogId = getDialogId();
+            EncryptedMessagesManager encManager = EncryptedMessagesManager.getInstance();
+            String originalEncrypted = messageText.toString();
+            
+            if (encManager.isInDecoyMode()) {
+                messageText = LocaleController.getString("RemovedMessage", R.string.RemovedMessage);
+            } else if (!encManager.isPasswordCached()) {
+                messageText = "🔒 " + LocaleController.getString("EncryptedMessage", R.string.EncryptedMessage);
+            } else if (encManager.isEncryptionEnabled(dialogId)) {
+                String password = encManager.getChatPassword(dialogId);
+                if (password != null) {
+                    String decrypted = encManager.decryptMessage(originalEncrypted, password);
+                    if (decrypted != null) {
+                        messageText = "🔓 " + decrypted;
+                    }
+                }
+            }
+        }
     }
 
     public MessageObject(int accountNum, TLRPC.Message message, AbstractMap<Long, TLRPC.User> users, boolean generateLayout, boolean checkMediaExists) {
@@ -5706,9 +5727,9 @@ public class MessageObject {
                 return;
             }
             
-            // If Protected Zone password is not cached, leave message encrypted
+            // If Protected Zone password is not cached, show placeholder instead of encrypted garbage
             if (!encManager.isPasswordCached()) {
-                // Message stays as encrypted text - user needs to enter Protected Zone password
+                messageText = "🔒 " + LocaleController.getString("EncryptedMessage", R.string.EncryptedMessage);
                 return;
             }
             

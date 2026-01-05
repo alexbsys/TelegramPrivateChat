@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="AppName">CryptoGram</string>
-    <string name="AppNameBeta">CryptoGram Beta</string>
+    <string name="AppName">CipherGram</string>
+    <string name="AppNameBeta">CipherGram Beta</string>
     <string name="LanguageName">Русский</string>
     <string name="English">Английский</string>
     <string name="LanguageNameInEnglish">Russian</string>
@@ -269,11 +269,11 @@
     <string name="HiddenChats">Скрытые чаты</string>
     <string name="SetupHiddenChatsPassword">Установка пароля скрытых чатов</string>
     <string name="EnterHiddenChatsPassword">Введите пароль скрытых чатов</string>
-    <string name="EnterProtectedZonePassword">Введите пароль Protected Zone</string>
-    <string name="SetupProtectedZonePassword">Установка пароля Protected Zone</string>
+    <string name="EnterProtectedZonePassword">Введите пароль Защищённой зоны</string>
+    <string name="SetupProtectedZonePassword">Установка пароля Защищённой зоны</string>
     <string name="HideChat">Скрыть чат</string>
     <string name="UnhideChat">Показать чат</string>
-    <string name="SecurityPassword">Защитный пароль</string>
+    <string name="SecurityPassword">Пароль-обманка</string>
     <string name="SecurityPasswordSet">установлен</string>
     <string name="SecurityPasswordNotSet">не установлен</string>
     <string name="CurrentPassword">Текущий пароль</string>
@@ -286,6 +286,13 @@
     <string name="IncorrectPassword">Неверный пароль</string>
     <string name="PasswordChangedSuccessfully">Пароль успешно изменён</string>
     <string name="Success">Успех</string>
+    <string name="SetCustomPassword">Установить пароль</string>
+    <string name="SetCustomPasswordMessage">Рекомендуем установить собственный пароль для Защищённой Зоны, чтобы повысить безопасность. Вы также можете пропустить этот шаг и использовать стандартный пароль \"0000\".</string>
+    <string name="DontUsePassword">Не использовать пароль</string>
+    <string name="DefaultPasswordMessage">Пароль защищённой зоны не задан. Используйте пароль 0000 для доступа к скрытым чатам.</string>
+    <string name="CurrentPasswordOptional">Текущий пароль (необязательно)</string>
+    <string name="RemovePassword">Убрать пароль</string>
+    <string name="PasswordRemovedMessage">Пароль удалён. Защищённая Зона теперь доступна без пароля.</string>
     <string name="Error">Ошибка</string>
     <string name="AlreadyHidden">Уже скрыт</string>
     <string name="ChatAlreadyHidden">Этот чат уже скрыт.</string>
@@ -300,14 +307,14 @@
     <string name="HiddenChatsCount">Скрытые чаты (%d)</string>
     <string name="NoHiddenChatsYet">Скрытых чатов пока нет. Используйте «Скрыть чат», чтобы добавить чат в список скрытых.</string>
     <string name="HiddenChatsInfo">Эти чаты скрыты из основного списка и видны только при вводе пароля в поиске. Нажмите на чат, чтобы показать его.</string>
-    <string name="SecurityPasswordTitle">Защитный пароль</string>
-    <string name="SecurityPasswordIsSet">Защитный пароль установлен.\n\nКогда вы вводите этот пароль вместо настоящего, показывается пустой список скрытых чатов. Используйте это, если кто-то заставляет вас показать скрытые чаты.</string>
-    <string name="SecurityPasswordNotSetMessage">Установите защитный пароль, который показывает пустой список скрытых чатов.\n\nИспользуйте это, если кто-то заставляет вас показать скрытые чаты — введите этот пароль вместо настоящего, и они ничего не увидят.</string>
+    <string name="SecurityPasswordTitle">Пароль-обманка</string>
+    <string name="SecurityPasswordIsSet">Пароль-обманка установлен.\n\nКогда вы вводите этот пароль вместо настоящего, показывается пустой список скрытых чатов. Используйте это, если кто-то заставляет вас показать скрытые чаты.</string>
+    <string name="SecurityPasswordNotSetMessage">Установите пароль-обманку, который показывает пустой список скрытых чатов.\n\nИспользуйте это, если кто-то заставляет вас показать скрытые чаты — введите этот пароль вместо настоящего, и они ничего не увидят.</string>
     <string name="SetPassword">Установить пароль</string>
-    <string name="SetSecurityPassword">Установить защитный пароль</string>
-    <string name="SecurityPasswordMustBeDifferent">Защитный пароль должен отличаться от основного пароля.</string>
-    <string name="SecurityPasswordSetSuccess">Защитный пароль установлен.\n\nКогда вы введёте этот пароль в поиске, покажется пустой список.</string>
-    <string name="SecurityPasswordRemoved">Защитный пароль удалён.</string>
+    <string name="SetSecurityPassword">Установить пароль-обманку</string>
+    <string name="SecurityPasswordMustBeDifferent">Пароль-обманка должен отличаться от основного пароля.</string>
+    <string name="SecurityPasswordSetSuccess">Пароль-обманка установлен.\n\nКогда вы введёте этот пароль в поиске, покажется пустой список.</string>
+    <string name="SecurityPasswordRemoved">Пароль-обманка удалён.</string>
     <string name="Removed">Удалено</string>
     <string name="Change">Изменить</string>
     <string name="Remove">Удалить</string>
@@ -316,6 +323,7 @@
     
     <!-- Encrypted Messages -->
     <string name="EncryptedMessages">Зашифрованные сообщения</string>
+    <string name="EncryptedMessage">Зашифрованное сообщение</string>
     <string name="NeedHiddenChatsPassword">Сначала нужно установить пароль скрытых чатов. Перейдите в меню → Дополнительная безопасность.</string>
     <string name="EnterHiddenPasswordFirst">Сначала введите пароль скрытых чатов через поиск в главном списке чатов.</string>
     <string name="EncryptedMessagesEnabledInfo">Зашифрованные сообщения включены для этого чата. Все ваши сообщения будут автоматически шифроваться.</string>
@@ -329,12 +337,42 @@
     <string name="AskPasswordDisabled">Отключено</string>
     <string name="AskPasswordAlways">Всегда</string>
     <string name="AskPasswordIfEncrypted">Если есть шифр. чаты</string>
+    <string name="AskPasswordBlockApp">Блокировать приложение без пароля</string>
     <string name="AskPasswordIfEncryptedShort">Если есть шифр.</string>
     <string name="DuplicateDetection">Обнаружение дубликатов</string>
     <string name="DuplicateDetectionInfo">Количество сообщений для проверки на дубликаты. 0 - отключено. Обнаруживает пересылку ваших зашифрованных сообщений.</string>
     <string name="Disabled">Отключено</string>
     <string name="ChatEncryptionPassword">Пароль шифрования чата</string>
-    <string name="NeedProtectedZonePassword">Вам нужно сначала установить пароль Protected Zone. Перейдите в Дополнительную безопасность в меню.</string>
+    
+    <!-- Encrypted Calls -->
+    <string name="EncryptedCalls">Шифрованные звонки</string>
+    <string name="OutgoingCallPassword">Шифрование исходящих</string>
+    <string name="OutgoingCallPasswordInfo">Установите пароль для шифрования исходящего аудио и видео во время звонков. Собеседник должен иметь этот пароль в списке входящих ключей для расшифровки.</string>
+    <string name="IncomingCallKeys">Ключи входящих звонков</string>
+    <string name="AddIncomingKey">Добавить ключ</string>
+    <string name="EditIncomingKey">Редактировать ключ</string>
+    <string name="KeyName">Название ключа</string>
+    <string name="EncryptedCallsInfo">Шифрованные звонки используют дополнительный уровень шифрования поверх шифрования Telegram. Обе стороны должны использовать совпадающие пароли.</string>
+    <string name="Enable">Включить</string>
+
+    <!-- Call Encryption Status -->
+    <string name="OutgoingEncrypted">Исходящие: Зашифрованы</string>
+    <string name="OutgoingUnencrypted">Исходящие: Не зашифрованы</string>
+    <string name="IncomingDecrypted">Входящие: Расшифрованы</string>
+    <string name="IncomingDecryptionFailed">Входящие: Нет подходящего ключа</string>
+    <string name="IncomingUnencrypted">Входящие: Не зашифрованы</string>
+    <string name="NeedProtectedZonePassword">Вам нужно сначала установить пароль Защищённой зоны. Перейдите в Дополнительную безопасность в меню.</string>
+    <string name="ProtectedZonePasswordNeeded">Для доступа к сохранённым ключам шифрования требуется пароль Защищённой зоны. Введите его или пропустите, чтобы ввести пароль звонка напрямую.</string>
+    <string name="DecryptionSuccessful">Расшифровка успешна!</string>
+    <string name="BatteryOptimizationTitle">Обнаружена оптимизация батареи</string>
+    <string name="BatteryOptimizationMessage">На вашем телефоне включена оптимизация батареи для CipherGram. Это может мешать получению входящих звонков и сообщений когда приложение свёрнуто.\n\nДля надёжного получения звонков и уведомлений отключите оптимизацию батареи для этого приложения.</string>
+    <string name="DisableOptimization">Отключить сейчас</string>
+    <string name="ShowInstructions">Показать инструкцию</string>
+    <string name="BatteryOptimizationInstructions">Как отключить оптимизацию батареи</string>
+    <string name="BatteryOptimizationInstructionsText">1. Откройте Настройки телефона\n\n2. Перейдите в \"Приложения\"\n\n3. Найдите \"CipherGram\" и нажмите на него\n\n4. Перейдите в настройки \"Батарея\"\n\n5. Выберите \"Без ограничений\" или \"Не оптимизировать\"\n\nПримечание: Некоторые производители (Xiaomi, Huawei, Samsung) имеют дополнительные функции энергосбережения, которые нужно отключать отдельно в их настройках батареи или управления питанием.</string>
+    <string name="OpenSettings">Открыть настройки</string>
+    <string name="Later">Позже</string>
+    <string name="Exit">Выход</string>
     <string name="ProtectedZonePassword">Пароль Защищённой зоны</string>
     <string name="EnterProtectedZonePasswordFirst">Введите пароль Защищённой зоны для доступа к настройкам шифрования сообщений.</string>
     <string name="ProtectedZonePasswordRequired">Требуется пароль Защищённой зоны</string>

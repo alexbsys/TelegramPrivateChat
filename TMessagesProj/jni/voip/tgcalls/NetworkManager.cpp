@@ -14,6 +14,7 @@
 
 #include "TurnCustomizerImpl.h"
 #include "platform/PlatformInterface.h"
+#include "CustomFrameEncryption.h"
 
 extern "C" {
 #include <openssl/sha.h>
@@ -238,6 +239,18 @@ void NetworkManager::receiveSignalingMessage(DecryptedMessage &&message) {
 uint32_t NetworkManager::sendMessage(const Message &message) {
 	if (const auto prepared = _transport.prepareForSending(message)) {
 		rtc::PacketOptions packetOptions;
+		
+		// Apply custom frame encryption if outgoing key is set
+		auto& customEncryption = CustomFrameEncryption::getInstance();
+		if (customEncryption.hasOutgoingKey()) {
+			auto encrypted = customEncryption.encryptFrame(prepared->bytes.data(), prepared->bytes.size());
+			if (!encrypted.empty()) {
+				_transportChannel->SendPacket((const char *)encrypted.data(), encrypted.size(), packetOptions, 0);
+				addTrafficStats(encrypted.size(), false);
+				return prepared->counter;
+			}
+		}
+		
 		_transportChannel->SendPacket((const char *)prepared->bytes.data(), prepared->bytes.size(), packetOptions, 0);
         addTrafficStats(prepared->bytes.size(), false);
 		return prepared->counter;
@@ -344,10 +357,32 @@ void NetworkManager::transportPacketReceived(rtc::PacketTransportInternal *trans
     
     addTrafficStats(size, true);
 
-	if (auto decrypted = _transport.handleIncomingPacket(bytes, size)) {
+	// Check if packet is custom encrypted and try to decrypt
+	auto& customEncryption = CustomFrameEncryption::getInstance();
+	const char* processBytes = bytes;
+	size_t processSize = size;
+	std::vector<uint8_t> decryptedData;
+	
+	if (customEncryption.isEncryptedFrame(reinterpret_cast<const uint8_t*>(bytes), size)) {
+		bool decrypted = false;
+		bool wasEncrypted = false;
+		decryptedData = customEncryption.decryptFrame(reinterpret_cast<const uint8_t*>(bytes), size, decrypted, wasEncrypted);
+		
+		if (wasEncrypted && !decrypted) {
+			// Encrypted but couldn't decrypt - drop packet
+			return;
+		}
+		
+		if (!decryptedData.empty()) {
+			processBytes = reinterpret_cast<const char*>(decryptedData.data());
+			processSize = decryptedData.size();
+		}
+	}
+
+	if (auto decryptedMsg = _transport.handleIncomingPacket(processBytes, processSize)) {
 		if (_transportMessageReceived) {
-			_transportMessageReceived(std::move(decrypted->main));
-			for (auto &message : decrypted->additional) {
+			_transportMessageReceived(std::move(decryptedMsg->main));
+			for (auto &message : decryptedMsg->additional) {
 				_transportMessageReceived(std::move(message));
 			}
 		}

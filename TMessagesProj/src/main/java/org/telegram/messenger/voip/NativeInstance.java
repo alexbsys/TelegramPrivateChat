@@ -237,4 +237,26 @@ public class NativeInstance {
     public native void onRequestTimeComplete(long taskPtr, long time);
     public native void setConferenceCallId(long call_id);
     public static native String[] getAllVersions();
+    
+    // Custom Frame Encryption methods
+    public static native void setOutgoingEncryptionKey(byte[] key);
+    public static native void addIncomingEncryptionKey(byte[] key);
+    public static native void clearIncomingEncryptionKeys();
+    public static native boolean hasOutgoingEncryptionKey();
+    public static native int getIncomingEncryptionKeyCount();
+    // Returns: -1 = NotYetDetermined, 0 = Unencrypted, 1 = DecryptionSuccess, 2 = DecryptionFailed
+    public static native int getIncomingEncryptionStatus();
+    // Returns: 0 = AES-256, 1 = GOST 28147, 2 = AES-LITE, 3 = GOST-LITE
+    public static native int getIncomingEncryptionType();
+    // Returns: 0 = AES-256, 1 = GOST 28147, 2 = AES-LITE, 3 = GOST-LITE
+    public static native int getOutgoingEncryptionType();
+    // Set encryption type for outgoing
+    public static native void setOutgoingEncryptionType(int type);
+    
+    // Traffic stats (tracked by our encryptor/decryptor)
+    // Returns: [bytesSent, bytesReceived, audioBytesSent, audioBytesReceived]
+    public static native long[] getCustomTrafficStats();
+    
+    // Incoming video codec type: 0 = Unknown, 1 = H.264, 2 = H.265, 3 = VP8, 4 = VP9
+    public static native int getIncomingVideoCodecType();
 }

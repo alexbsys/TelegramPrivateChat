@@ -4584,6 +4584,44 @@ public class AndroidUtilities {
         }
         return true;
     }
+    
+    /**
+     * Check if the app is ignoring battery optimizations
+     */
+    public static boolean isIgnoringBatteryOptimizations() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            PowerManager pm = (PowerManager) ApplicationLoader.applicationContext.getSystemService(Context.POWER_SERVICE);
+            if (pm != null) {
+                return pm.isIgnoringBatteryOptimizations(ApplicationLoader.applicationContext.getPackageName());
+            }
+        }
+        return true; // Assume ok on older Android versions
+    }
+    
+    /**
+     * Request to disable battery optimization for better push notifications
+     */
+    public static void requestIgnoreBatteryOptimizations(Activity activity) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            if (!isIgnoringBatteryOptimizations()) {
+                try {
+                    Intent intent = new Intent();
+                    intent.setAction(android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS);
+                    intent.setData(android.net.Uri.parse("package:" + ApplicationLoader.applicationContext.getPackageName()));
+                    activity.startActivity(intent);
+                } catch (Exception e) {
+                    FileLog.e(e);
+                    // Fallback to battery optimization settings
+                    try {
+                        Intent intent = new Intent(android.provider.Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS);
+                        activity.startActivity(intent);
+                    } catch (Exception e2) {
+                        FileLog.e(e2);
+                    }
+                }
+            }
+        }
+    }
 
     public static void showProxyAlert(Activity activity, final String address, final String port, final String user, final String password, final String secret) {
         BottomSheet.Builder builder = new BottomSheet.Builder(activity);

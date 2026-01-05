@@ -15,6 +15,7 @@ import android.os.Handler;
 import android.os.Looper;
 import android.util.Log;
 
+import com.google.firebase.crashlytics.FirebaseCrashlytics;
 import com.google.gson.ExclusionStrategy;
 import com.google.gson.FieldAttributes;
 import com.google.gson.Gson;
@@ -422,6 +423,10 @@ public class FileLog {
         if (BuildVars.DEBUG_VERSION && needSent(e) && logToAppCenter) {
             AndroidUtilities.appCenterLog(e);
         }
+        // Report to Firebase Crashlytics
+        try {
+            FirebaseCrashlytics.getInstance().recordException(e);
+        } catch (Exception ignored) {}
         if (BuildVars.DEBUG_VERSION && e.getMessage() != null && e.getMessage().contains("disk image is malformed") && !databaseIsMalformed) {
             FileLog.d("copy malformed files");
             databaseIsMalformed = true;

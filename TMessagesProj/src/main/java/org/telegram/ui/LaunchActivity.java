@@ -1516,13 +1516,105 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
     private void openHiddenChatsWithPassword() {
         HiddenChatsManager manager = HiddenChatsManager.getInstance();
         
+        // Initialize with default password "0000" on first start
+        manager.initializeFirstStart();
+        
         if (!manager.hasPassword()) {
-            // First time setup - ask for new password
+            // First time setup - this shouldn't happen now since we auto-init with "0000"
             showSetupHiddenChatsPasswordDialog();
-        } else {
-            // Ask for password to access hidden chats menu
-            showEnterHiddenChatsPasswordDialog();
+            return;
         }
+        
+        // KEY LOGIC: Only skip password dialog if password is "0000"
+        // If password is NOT "0000" - ALWAYS ask for password, even if cached
+        
+        // First check if password is "0000" - in that case, never ask
+        if (manager.isUsingDefaultPassword()) {
+            // Password is "0000" - auto-login without asking
+            if (!manager.tryAutoLoginWithDefaultPassword()) {
+                // Should not happen, but try to load anyway
+                manager.tryLoadMainConfig("0000");
+            }
+            EncryptedMessagesManager.getInstance().loadWithPassword("0000");
+            
+            // Check if we should offer to set custom password
+            if (manager.shouldOfferCustomPassword()) {
+                manager.setPasswordOfferShown(true);
+                showSetCustomPasswordDialog();
+            } else {
+                presentFragment(new HiddenChatsActivity());
+            }
+            return;
+        }
+        
+        // Password is NOT "0000" - always ask for password
+        showEnterHiddenChatsPasswordDialog();
+    }
+    
+    private void showSetCustomPasswordDialog() {
+        Context context = this;
+        AlertDialog.Builder builder = new AlertDialog.Builder(context);
+        builder.setTitle(LocaleController.getString("SetCustomPassword", R.string.SetCustomPassword));
+        builder.setMessage(LocaleController.getString("SetCustomPasswordMessage", R.string.SetCustomPasswordMessage));
+        
+        android.widget.LinearLayout layout = new android.widget.LinearLayout(context);
+        layout.setOrientation(android.widget.LinearLayout.VERTICAL);
+        layout.setPadding(AndroidUtilities.dp(24), AndroidUtilities.dp(8), AndroidUtilities.dp(24), 0);
+
+        final org.telegram.ui.Components.EditTextBoldCursor passwordField = new org.telegram.ui.Components.EditTextBoldCursor(context);
+        passwordField.setTextSize(android.util.TypedValue.COMPLEX_UNIT_DIP, 16);
+        passwordField.setHintTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteHintText));
+        passwordField.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText));
+        passwordField.setBackgroundDrawable(Theme.createEditTextDrawable(context, false));
+        passwordField.setMaxLines(1);
+        passwordField.setLines(1);
+        passwordField.setSingleLine(true);
+        passwordField.setInputType(android.text.InputType.TYPE_CLASS_TEXT | android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD);
+        passwordField.setHint(LocaleController.getString("Password", R.string.Password));
+        layout.addView(passwordField, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, 48));
+
+        final org.telegram.ui.Components.EditTextBoldCursor confirmField = new org.telegram.ui.Components.EditTextBoldCursor(context);
+        confirmField.setTextSize(android.util.TypedValue.COMPLEX_UNIT_DIP, 16);
+        confirmField.setHintTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteHintText));
+        confirmField.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText));
+        confirmField.setBackgroundDrawable(Theme.createEditTextDrawable(context, false));
+        confirmField.setMaxLines(1);
+        confirmField.setLines(1);
+        confirmField.setSingleLine(true);
+        confirmField.setInputType(android.text.InputType.TYPE_CLASS_TEXT | android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD);
+        confirmField.setHint(LocaleController.getString("ConfirmPassword", R.string.ConfirmPassword));
+        layout.addView(confirmField, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, 48, 0, 8, 0, 0));
+
+        builder.setView(layout);
+
+        builder.setPositiveButton(LocaleController.getString("Set", R.string.Set), (dialog, which) -> {
+            String pass = passwordField.getText().toString();
+            String confirm = confirmField.getText().toString();
+
+            if (android.text.TextUtils.isEmpty(pass)) {
+                android.widget.Toast.makeText(context, LocaleController.getString("PasswordCannotBeEmpty", R.string.PasswordCannotBeEmpty), android.widget.Toast.LENGTH_SHORT).show();
+                return;
+            }
+
+            if (!pass.equals(confirm)) {
+                android.widget.Toast.makeText(context, LocaleController.getString("PasswordsDoNotMatch", R.string.PasswordsDoNotMatch), android.widget.Toast.LENGTH_SHORT).show();
+                return;
+            }
+
+            HiddenChatsManager.getInstance().changePassword(pass);
+            presentFragment(new HiddenChatsActivity());
+        });
+        
+        builder.setNeutralButton(LocaleController.getString("DontUsePassword", R.string.DontUsePassword), (dialog, which) -> {
+            HiddenChatsManager.getInstance().setUserDeclinedPassword(true);
+            android.widget.Toast.makeText(context, 
+                LocaleController.getString("DefaultPasswordMessage", R.string.DefaultPasswordMessage), 
+                android.widget.Toast.LENGTH_LONG).show();
+            presentFragment(new HiddenChatsActivity());
+        });
+
+        builder.setNegativeButton(LocaleController.getString("Cancel", R.string.Cancel), null);
+        builder.show();
     }
 
     private void showSetupHiddenChatsPasswordDialog() {
@@ -1610,6 +1702,8 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
 
             // Check both real and decoy passwords
             if (HiddenChatsManager.getInstance().checkPasswordWithDecoy(pass)) {
+                // Also load encrypted messages manager with password for search to work
+                EncryptedMessagesManager.getInstance().loadWithPassword(pass);
                 presentFragment(new HiddenChatsActivity());
             } else {
                 android.widget.Toast.makeText(context, LocaleController.getString("IncorrectPassword", R.string.IncorrectPassword), android.widget.Toast.LENGTH_SHORT).show();
@@ -7178,6 +7272,97 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
         
         // Check if we need to ask for Protected Zone password on start
         checkProtectedZonePasswordOnStart();
+        
+        // Check if we need to show battery optimization reminder
+        checkBatteryOptimizationReminder();
+    }
+    
+    private static final String PREF_BATTERY_REMINDER_SHOWN = "battery_optimization_reminder_shown";
+    
+    private void checkBatteryOptimizationReminder() {
+        // Only check on Android M+
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) {
+            return;
+        }
+        
+        // Check if we already showed this reminder
+        SharedPreferences prefs = ApplicationLoader.applicationContext.getSharedPreferences("mainconfig", MODE_PRIVATE);
+        if (prefs.getBoolean(PREF_BATTERY_REMINDER_SHOWN, false)) {
+            return;
+        }
+        
+        // Check if battery optimization is enabled (we're NOT in the whitelist)
+        if (AndroidUtilities.isIgnoringBatteryOptimizations()) {
+            // Already whitelisted, no need to remind
+            return;
+        }
+        
+        // Show reminder with delay so UI is ready
+        AndroidUtilities.runOnUIThread(() -> {
+            if (isFinishing()) {
+                return;
+            }
+            showBatteryOptimizationDialog();
+        }, 2000);
+    }
+    
+    private void showBatteryOptimizationDialog() {
+        if (isFinishing()) {
+            return;
+        }
+        
+        AlertDialog.Builder builder = new AlertDialog.Builder(this);
+        builder.setTitle("⚠️ " + LocaleController.getString(R.string.BatteryOptimizationTitle));
+        
+        String message = LocaleController.getString("BatteryOptimizationMessage", R.string.BatteryOptimizationMessage);
+        builder.setMessage(message);
+        
+        builder.setPositiveButton(LocaleController.getString("DisableOptimization", R.string.DisableOptimization), (dialog, which) -> {
+            // Mark as shown
+            ApplicationLoader.applicationContext.getSharedPreferences("mainconfig", MODE_PRIVATE)
+                .edit().putBoolean(PREF_BATTERY_REMINDER_SHOWN, true).apply();
+            
+            // Open battery optimization settings
+            AndroidUtilities.requestIgnoreBatteryOptimizations(this);
+        });
+        
+        builder.setNeutralButton(LocaleController.getString("ShowInstructions", R.string.ShowInstructions), (dialog, which) -> {
+            // Show detailed instructions
+            showBatteryOptimizationInstructions();
+        });
+        
+        builder.setNegativeButton(LocaleController.getString("Later", R.string.Later), (dialog, which) -> {
+            // Don't mark as shown - will remind next time
+        });
+        
+        AlertDialog dialog = builder.create();
+        dialog.setCancelable(false);
+        dialog.show();
+    }
+    
+    private void showBatteryOptimizationInstructions() {
+        AlertDialog.Builder builder = new AlertDialog.Builder(this);
+        builder.setTitle("📋 " + LocaleController.getString("BatteryOptimizationInstructions", R.string.BatteryOptimizationInstructions));
+        
+        String instructions = LocaleController.getString("BatteryOptimizationInstructionsText", R.string.BatteryOptimizationInstructionsText);
+        builder.setMessage(instructions);
+        
+        builder.setPositiveButton(LocaleController.getString("OpenSettings", R.string.OpenSettings), (dialog, which) -> {
+            // Mark as shown
+            ApplicationLoader.applicationContext.getSharedPreferences("mainconfig", MODE_PRIVATE)
+                .edit().putBoolean(PREF_BATTERY_REMINDER_SHOWN, true).apply();
+            
+            // Open battery optimization settings
+            AndroidUtilities.requestIgnoreBatteryOptimizations(this);
+        });
+        
+        builder.setNegativeButton(LocaleController.getString("OK", R.string.OK), (dialog, which) -> {
+            // Mark as shown
+            ApplicationLoader.applicationContext.getSharedPreferences("mainconfig", MODE_PRIVATE)
+                .edit().putBoolean(PREF_BATTERY_REMINDER_SHOWN, true).apply();
+        });
+        
+        builder.show();
     }
     
     private void checkProtectedZonePasswordOnStart() {
@@ -7192,7 +7377,34 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
             hiddenManager.hasPassword() && 
             !encManager.isPasswordCached()) {
             
+            // Try auto-login with default password "0000" first
+            if (hiddenManager.tryAutoLoginWithDefaultPassword()) {
+                // Auto-login successful - load encrypted messages
+                EncryptedMessagesManager.getInstance().loadWithPassword(HiddenChatsManager.DEFAULT_PASSWORD);
+                return;
+            }
+            
             // Show password dialog
+            showProtectedZonePasswordOnStartDialog();
+        }
+    }
+    
+    private void checkProtectedZonePasswordOnResume() {
+        HiddenChatsManager hiddenManager = HiddenChatsManager.getInstance();
+        EncryptedMessagesManager encManager = EncryptedMessagesManager.getInstance();
+        
+        // Only check if:
+        // 1. "Forget password on minimize" is enabled
+        // 2. Mode is "Block app without password"
+        // 3. Password is not cached (was forgotten when minimized)
+        // 4. User has a non-default password set
+        if (hiddenManager.isForgetPasswordOnMinimize() && 
+            hiddenManager.shouldBlockAppWithoutPassword() &&
+            !encManager.isPasswordCached() &&
+            hiddenManager.hasPassword() &&
+            !hiddenManager.isUsingDefaultPassword()) {
+            
+            FileLog.d("LaunchActivity: Password forgotten after minimize in block mode, showing password dialog");
             showProtectedZonePasswordOnStartDialog();
         }
     }
@@ -7201,6 +7413,9 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
         if (this.isFinishing()) {
             return;
         }
+        
+        HiddenChatsManager hiddenManager = HiddenChatsManager.getInstance();
+        boolean shouldBlockApp = hiddenManager.shouldBlockAppWithoutPassword();
         
         AlertDialog.Builder builder = new AlertDialog.Builder(this);
         builder.setTitle("🔑 " + LocaleController.getString("EnterProtectedZonePassword", R.string.EnterProtectedZonePassword));
@@ -7228,12 +7443,32 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
             if (HiddenChatsManager.getInstance().checkPasswordWithDecoy(password)) {
                 // Load encrypted messages manager with password
                 EncryptedMessagesManager.getInstance().loadWithPassword(password);
+            } else if (shouldBlockApp) {
+                // Wrong password in block mode - show dialog again
+                AndroidUtilities.runOnUIThread(() -> showProtectedZonePasswordOnStartDialog(), 100);
             }
         });
         
-        builder.setNegativeButton(LocaleController.getString("Cancel", R.string.Cancel), null);
+        if (shouldBlockApp) {
+            // In block mode, exit app if user cancels
+            builder.setNegativeButton(LocaleController.getString("Exit", R.string.Exit), (dialog, which) -> {
+                finish();
+            });
+        } else {
+            builder.setNegativeButton(LocaleController.getString("Cancel", R.string.Cancel), null);
+        }
         
-        AlertDialog dialog = builder.show();
+        AlertDialog dialog = builder.create();
+        dialog.setCancelable(!shouldBlockApp); // Not cancelable in block mode
+        dialog.setCanceledOnTouchOutside(!shouldBlockApp);
+        dialog.show();
+        
+        if (shouldBlockApp) {
+            // Handle back press in block mode
+            dialog.setOnCancelListener(d -> {
+                finish();
+            });
+        }
         
         // Focus on password field
         passwordInput.requestFocus();
@@ -7379,6 +7614,10 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
         
         // If user was in a hidden chat, close it and go to main dialogs list
         closeHiddenChatIfOpen();
+        
+        // Check if we need to ask for Protected Zone password after resume 
+        // (e.g., when "forget password on minimize" is enabled with "block app" mode)
+        checkProtectedZonePasswordOnResume();
         
         pipActivityHandler.onResume();
         if (onResumeStaticCallback != null) {

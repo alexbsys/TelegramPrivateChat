@@ -6,6 +6,10 @@
 #include "v2/NativeNetworkingImpl.h"
 #include "v2/Signaling.h"
 #include "v2/ContentNegotiation.h"
+#include "CustomEncryptionManager.h"
+#include "CustomFrameEncryptorImpl.h"
+
+#include <android/log.h>
 
 #include "CodecSelectHelper.h"
 #include "platform/PlatformInterface.h"
@@ -207,6 +211,10 @@ public:
             std::string errorDesc;
             _outgoingAudioChannel->SetLocalContent(outgoingAudioDescription.get(), webrtc::SdpType::kOffer, errorDesc);
             _outgoingAudioChannel->SetRemoteContent(incomingAudioDescription.get(), webrtc::SdpType::kAnswer, errorDesc);
+            
+            // Set custom frame encryptor for outgoing audio
+            auto encryptor = CustomEncryptionManager::getInstance().createEncryptor();
+            _outgoingAudioChannel->send_channel()->SetFrameEncryptor(_ssrc, encryptor);
         });
 
         setIsMuted(false);
@@ -388,6 +396,12 @@ public:
 
             std::unique_ptr<AudioSinkImpl> audioLevelSink(new AudioSinkImpl(std::move(onAudioLevelsUpdated)));
             _audioChannel->receive_channel()->SetRawAudioSink(ssrc, std::move(audioLevelSink));
+            
+            // Set custom frame decryptor for incoming audio
+            __android_log_print(ANDROID_LOG_INFO, "IncomingV2Audio", 
+                "Setting frame decryptor for SSRC=%u", ssrc);
+            auto decryptor = CustomEncryptionManager::getInstance().createDecryptor();
+            _audioChannel->receive_channel()->SetFrameDecryptor(ssrc, decryptor);
         });
 
         outgoingAudioDescription.reset();
@@ -553,6 +567,14 @@ public:
             }
 
             _outgoingVideoChannel->send_channel()->SetRtpSendParameters(mediaContent.ssrc, rtpParameters);
+            
+            // Set custom frame encryptor for outgoing video
+            __android_log_print(ANDROID_LOG_INFO, "OutgoingVideoChannel", 
+                "Setting frame encryptor for SSRC=%u, isScreencast=%d", mediaContent.ssrc, isScreencast);
+            auto encryptor = CustomEncryptionManager::getInstance().createEncryptor();
+            _outgoingVideoChannel->send_channel()->SetFrameEncryptor(mediaContent.ssrc, encryptor);
+            __android_log_print(ANDROID_LOG_INFO, "OutgoingVideoChannel", 
+                "Frame encryptor SET for SSRC=%u", mediaContent.ssrc);
         });
 
         _outgoingVideoChannel->Enable(false);
@@ -758,6 +780,9 @@ public:
     _threads(threads),
     _channelManager(channelManager),
     _call(call) {
+        __android_log_print(ANDROID_LOG_INFO, "IncomingV2Video", 
+            "Creating IncomingV2VideoChannel, mainSsrc=%u, ssrcGroups=%zu", 
+            mediaContent.ssrc, mediaContent.ssrcGroups.size());
         _videoSink.reset(new VideoSinkImpl());
 
         _videoBitrateAllocatorFactory = webrtc::CreateBuiltinVideoBitrateAllocatorFactory();
@@ -823,13 +848,38 @@ public:
 
         incomingVideoDescription->AddStream(videoRecvStreamParams);
 
-        threads->getWorkerThread()->BlockingCall([&]() {
+        threads->getWorkerThread()->BlockingCall([&, allSsrcs]() {
             _videoChannel->SetPayloadTypeDemuxingEnabled(false);
+            
+            // CRITICAL: Set default frame decryptor BEFORE SetRemoteContent!
+            // SetRemoteContent creates streams via AddRecvStream, and we need
+            // the decryptor to be available when streams are created.
+            __android_log_print(ANDROID_LOG_INFO, "IncomingV2Video", 
+                "Setting DEFAULT frame decryptor BEFORE SetRemoteContent, main=%u, allSsrcs=%zu", 
+                _mainVideoSsrc, allSsrcs.size());
+            
+            auto decryptor = CustomEncryptionManager::getInstance().createDecryptor();
+            _videoChannel->receive_channel()->SetFrameDecryptor(0, decryptor);
+            
             std::string errorDesc;
             _videoChannel->SetLocalContent(outgoingVideoDescription.get(), webrtc::SdpType::kOffer, errorDesc);
             _videoChannel->SetRemoteContent(incomingVideoDescription.get(), webrtc::SdpType::kAnswer, errorDesc);
 
             _videoChannel->receive_channel()->SetSink(_mainVideoSsrc, _videoSink.get());
+            
+            // Also set for known SSRCs (in case they weren't covered by default)
+            for (uint32_t ssrc : allSsrcs) {
+                auto ssrcDecryptor = CustomEncryptionManager::getInstance().createDecryptor();
+                _videoChannel->receive_channel()->SetFrameDecryptor(ssrc, ssrcDecryptor);
+                __android_log_print(ANDROID_LOG_INFO, "IncomingV2Video", 
+                    "Frame decryptor set for known SSRC=%u", ssrc);
+            }
+            if (std::find(allSsrcs.begin(), allSsrcs.end(), _mainVideoSsrc) == allSsrcs.end()) {
+                auto mainDecryptor = CustomEncryptionManager::getInstance().createDecryptor();
+                _videoChannel->receive_channel()->SetFrameDecryptor(_mainVideoSsrc, mainDecryptor);
+                __android_log_print(ANDROID_LOG_INFO, "IncomingV2Video", 
+                    "Frame decryptor set for main SSRC=%u", _mainVideoSsrc);
+            }
         });
 
         _videoChannel->Enable(true);

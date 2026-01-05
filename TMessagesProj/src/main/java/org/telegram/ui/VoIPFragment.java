@@ -182,6 +182,12 @@ public class VoIPFragment implements
 
     private VoIPStatusTextView statusTextView;
     private TextView tariffInfoView;
+    private TextView encryptionStatusView;
+    private TextView debugInfoView;
+    private Runnable debugInfoRunnable;
+    private long lastDebugUpdateTime;
+    private long lastBytesSent;
+    private long lastBytesReceived;
     private Runnable tariffTimerRunnable;
     private ConferenceParticipantsView participantsView;
     private ImageView backIcon;
@@ -557,6 +563,7 @@ public class VoIPFragment implements
 
     private void destroy() {
         stopTariffTimer();
+        stopDebugInfoUpdates();
         if (VoIPService.getSharedInstance() != null) {
             VoIPService.getSharedInstance().unregisterStateListener(this);
         }
@@ -939,6 +946,21 @@ public class VoIPFragment implements
         topShadow = new View(context);
         topShadow.setBackground(new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, new int[]{ColorUtils.setAlphaComponent(Color.BLACK, (int) (255 * 0.4f)), Color.TRANSPARENT}));
         frameLayout.addView(topShadow, LayoutHelper.createFrame(LayoutHelper.MATCH_PARENT, 160, Gravity.TOP));
+        
+        // Create and add debug info overlay at top-left corner
+        debugInfoView = new TextView(context);
+        debugInfoView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 10);
+        debugInfoView.setTextColor(Color.WHITE);
+        debugInfoView.setGravity(Gravity.LEFT);
+        debugInfoView.setTypeface(android.graphics.Typeface.MONOSPACE);
+        debugInfoView.setShadowLayer(2, 1, 1, Color.BLACK);
+        debugInfoView.setBackgroundColor(0x80000000);
+        debugInfoView.setPadding(dp(8), dp(4), dp(8), dp(4));
+        debugInfoView.setVisibility(View.GONE);
+        frameLayout.addView(debugInfoView, LayoutHelper.createFrame(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT, Gravity.TOP | Gravity.LEFT, 8, 60, 8, 0));
+        
+        // Start debug info updates if enabled
+        startDebugInfoUpdates();
 
         emojiLayout = new LinearLayout(context) {
             @Override
@@ -1071,6 +1093,19 @@ public class VoIPFragment implements
         tariffInfoView.setAlpha(0.7f);
         tariffInfoView.setVisibility(View.GONE);
         statusLayout.addView(tariffInfoView, LayoutHelper.createLinear(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT, Gravity.CENTER_HORIZONTAL, 0, 0, 0, 6));
+        
+        // Encryption status view
+        encryptionStatusView = new TextView(context);
+        encryptionStatusView.setTextSize(TypedValue.COMPLEX_UNIT_DIP, 16);
+        encryptionStatusView.setTextColor(Color.WHITE);
+        encryptionStatusView.setGravity(Gravity.CENTER_HORIZONTAL);
+        encryptionStatusView.setTypeface(null, android.graphics.Typeface.BOLD);
+        encryptionStatusView.setShadowLayer(2, 1, 1, Color.BLACK);
+        encryptionStatusView.setVisibility(View.GONE);
+        statusLayout.addView(encryptionStatusView, LayoutHelper.createLinear(LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT, Gravity.CENTER_HORIZONTAL, 0, 0, 0, 4));
+        
+        // Update encryption status display
+        updateEncryptionStatusDisplay();
 
         if (state != null && state.getUser() != null && state.isConference() && state.getGroupCall() != null) {
             participantsView = new ConferenceParticipantsView(context);
@@ -1810,6 +1845,8 @@ public class VoIPFragment implements
         if (isFinished || switchingToPip) {
             return;
         }
+        // Update encryption status display
+        updateEncryptionStatusDisplay();
         lockOnScreen = false;
         boolean animated = previousState != -1;
         boolean showAcceptDeclineView = false;
@@ -3208,6 +3245,554 @@ public class VoIPFragment implements
         if (tariffTimerRunnable != null) {
             AndroidUtilities.cancelRunOnUIThread(tariffTimerRunnable);
             tariffTimerRunnable = null;
+        }
+    }
+    
+    /**
+     * Updates the encryption status display in the call UI.
+     * Shows outgoing and incoming encryption status with appropriate icons.
+     * Now shows encryption type (AES-256 or GOST 28147).
+     */
+    private void startDebugInfoUpdates() {
+        if (debugInfoView == null) {
+            return;
+        }
+        
+        boolean showDebug = org.telegram.messenger.CallSettingsManager.getInstance().isShowDebugInfo();
+        debugInfoView.setVisibility(showDebug ? View.VISIBLE : View.GONE);
+        
+        if (!showDebug) {
+            return;
+        }
+        
+        debugInfoRunnable = new Runnable() {
+            @Override
+            public void run() {
+                updateDebugInfo();
+                if (debugInfoView != null && debugInfoView.getVisibility() == View.VISIBLE) {
+                    AndroidUtilities.runOnUIThread(this, 1000);
+                }
+            }
+        };
+        AndroidUtilities.runOnUIThread(debugInfoRunnable, 500);
+    }
+    
+    private void stopDebugInfoUpdates() {
+        if (debugInfoRunnable != null) {
+            AndroidUtilities.cancelRunOnUIThread(debugInfoRunnable);
+            debugInfoRunnable = null;
+        }
+    }
+    
+    private void updateDebugInfo() {
+        if (debugInfoView == null || debugInfoView.getVisibility() != View.VISIBLE) {
+            return;
+        }
+        
+        VoIPService service = VoIPService.getSharedInstance();
+        if (service == null) {
+            debugInfoView.setText("No active call");
+            return;
+        }
+        
+        StringBuilder sb = new StringBuilder();
+        
+        try {
+            long currentTime = System.currentTimeMillis();
+            
+            sb.append("📊 Call Debug\n");
+            sb.append("────────────\n");
+            
+            // Call duration
+            long duration = service.getCallDuration();
+            sb.append("⏱️ ").append(formatDuration(duration)).append("\n\n");
+            
+            // TURN servers - check call server manager first, then local settings
+            org.telegram.messenger.CallSettingsManager csm = org.telegram.messenger.CallSettingsManager.getInstance();
+            java.util.List<org.telegram.messenger.CallSettingsManager.TurnServer> turnServers = null;
+            String turnSource = "";
+            
+            // First check if we have servers from call server manager
+            java.util.List<org.telegram.messenger.CallSettingsManager.TurnServer> callServerTurns = service.getCallServerTurnServers();
+            if (callServerTurns != null && !callServerTurns.isEmpty()) {
+                turnServers = callServerTurns;
+                turnSource = " (Server)";
+            } else {
+                // Fall back to local custom servers
+                turnServers = csm.getCustomTurnServers();
+                if (turnServers != null && !turnServers.isEmpty()) {
+                    turnSource = " (Local)";
+                }
+            }
+            
+            if (turnServers != null && !turnServers.isEmpty()) {
+                sb.append("📡 TURN").append(turnSource).append(":\n");
+                int count = 0;
+                for (org.telegram.messenger.CallSettingsManager.TurnServer server : turnServers) {
+                    if (server.enabled && count < 3) { // Show max 3 enabled servers
+                        String serverInfo = server.host;
+                        if (server.port != 3478) {
+                            serverInfo += ":" + server.port;
+                        }
+                        sb.append("  • ").append(serverInfo).append("\n");
+                        count++;
+                    }
+                }
+                if (count == 0) {
+                    sb.append("  (none enabled)\n");
+                }
+            } else {
+                sb.append("📡 TURN: Default\n");
+            }
+            sb.append("\n");
+            
+            // Video codec - get actual detected codec, not just settings
+            // For send: show what we prefer, but note it may differ if peer doesn't support
+            int preferredCodec = csm.getPreferredVideoCodec();
+            String videoCodecSendSetting;
+            switch (preferredCodec) {
+                case org.telegram.messenger.CallSettingsManager.VIDEO_CODEC_H264:
+                    videoCodecSendSetting = "H.264";
+                    break;
+                case org.telegram.messenger.CallSettingsManager.VIDEO_CODEC_H265:
+                    videoCodecSendSetting = "H.265";
+                    break;
+                default:
+                    videoCodecSendSetting = "Auto";
+                    break;
+            }
+            
+            // Get incoming codec from decryptor - this is the ACTUAL detected codec
+            String videoCodecRecv = getIncomingVideoCodec();
+            
+            // For now, assume send codec matches recv if we're getting video
+            // This is because WebRTC typically negotiates same codec for both directions
+            String videoCodecSend = "N/A".equals(videoCodecRecv) ? videoCodecSendSetting : videoCodecRecv;
+            
+            // Codecs
+            sb.append("🎬 Video:\n");
+            sb.append("  Send: ").append(videoCodecSend).append(" (pref: ").append(videoCodecSendSetting).append(")\n");
+            sb.append("  Recv: ").append(videoCodecRecv).append("\n");
+            sb.append("🎤 Audio: Opus\n\n");
+            
+            // Traffic stats - use our tracked values from VoIPService
+            long[] trafficStats = service.getCustomTrafficStats();
+            if (trafficStats != null && trafficStats.length >= 4) {
+                long bytesSent = trafficStats[0];
+                long bytesReceived = trafficStats[1];
+                long audioBytesSent = trafficStats[2];
+                long audioBytesReceived = trafficStats[3];
+                
+                // Calculate bitrate
+                if (lastDebugUpdateTime > 0 && currentTime > lastDebugUpdateTime) {
+                    long timeDiff = currentTime - lastDebugUpdateTime;
+                    if (timeDiff > 0) {
+                        long sentDiff = bytesSent - lastBytesSent;
+                        long recvDiff = bytesReceived - lastBytesReceived;
+                        
+                        // Calculate kbps
+                        long sendBitrate = (sentDiff * 8) / timeDiff; // kbps
+                        long recvBitrate = (recvDiff * 8) / timeDiff; // kbps
+                        
+                        sb.append("📈 Bitrate:\n");
+                        sb.append("  ↑ ").append(sendBitrate).append(" kbps\n");
+                        sb.append("  ↓ ").append(recvBitrate).append(" kbps\n\n");
+                    }
+                }
+                
+                sb.append("📊 Traffic:\n");
+                sb.append("  ↑ ").append(formatBytes(bytesSent)).append("\n");
+                sb.append("  ↓ ").append(formatBytes(bytesReceived)).append("\n\n");
+                
+                lastBytesSent = bytesSent;
+                lastBytesReceived = bytesReceived;
+            } else {
+                // Fallback to native stats if available
+                Instance.TrafficStats stats = service.getTrafficStats();
+                if (stats != null) {
+                    long totalSent = stats.bytesSentWifi + stats.bytesSentMobile;
+                    long totalRecv = stats.bytesReceivedWifi + stats.bytesReceivedMobile;
+                    
+                    if (totalSent > 0 || totalRecv > 0) {
+                        if (lastDebugUpdateTime > 0 && currentTime > lastDebugUpdateTime) {
+                            long timeDiff = currentTime - lastDebugUpdateTime;
+                            if (timeDiff > 0) {
+                                long sentDiff = totalSent - lastBytesSent;
+                                long recvDiff = totalRecv - lastBytesReceived;
+                                
+                                long sendBitrate = (sentDiff * 8) / timeDiff;
+                                long recvBitrate = (recvDiff * 8) / timeDiff;
+                                
+                                sb.append("📈 Bitrate:\n");
+                                sb.append("  ↑ ").append(sendBitrate).append(" kbps\n");
+                                sb.append("  ↓ ").append(recvBitrate).append(" kbps\n\n");
+                            }
+                        }
+                        
+                        sb.append("📊 Traffic:\n");
+                        sb.append("  ↑ ").append(formatBytes(totalSent)).append("\n");
+                        sb.append("  ↓ ").append(formatBytes(totalRecv)).append("\n\n");
+                        
+                        lastBytesSent = totalSent;
+                        lastBytesReceived = totalRecv;
+                    }
+                }
+            }
+            lastDebugUpdateTime = currentTime;
+            
+            // Encryption info - show ACTUAL status, not just settings
+            sb.append("🔐 Encryption:\n");
+            org.telegram.messenger.EncryptedCallsManager ecm = org.telegram.messenger.EncryptedCallsManager.getInstance();
+            
+            // Outgoing: check if encryption is actually enabled for this call
+            String outgoingStatus;
+            if (ecm.isCallEncryptionEnabled() && ecm.hasOutgoingPassword()) {
+                int outgoingType = ecm.getOutgoingEncryptionType();
+                String typeName = org.telegram.messenger.EncryptedCallsManager.getEncryptionName(outgoingType);
+                outgoingStatus = typeName != null ? typeName : "Unknown";
+            } else {
+                outgoingStatus = "None (disabled)";
+            }
+            sb.append("  Out: ").append(outgoingStatus).append("\n");
+            
+            // Incoming: use actual detected status from native
+            String incomingStatus = getIncomingEncryptionStatus();
+            sb.append("  In: ").append(incomingStatus).append("\n");
+            
+        } catch (Exception e) {
+            sb.append("Error: ").append(e.getMessage());
+        }
+        
+        debugInfoView.setText(sb.toString());
+    }
+    
+    private String getIncomingVideoCodec() {
+        try {
+            int codecType = org.telegram.messenger.voip.NativeInstance.getIncomingVideoCodecType();
+            switch (codecType) {
+                case 1: return "H.264";
+                case 2: return "H.265";
+                case 3: return "VP8";
+                case 4: return "VP9";
+                default: return "N/A";
+            }
+        } catch (Exception e) {
+            return "N/A";
+        }
+    }
+    
+    private String formatBytes(long bytes) {
+        if (bytes < 1024) return bytes + " B";
+        if (bytes < 1024 * 1024) return String.format("%.1f KB", bytes / 1024.0);
+        return String.format("%.1f MB", bytes / (1024.0 * 1024.0));
+    }
+    
+    private String formatDuration(long millis) {
+        long seconds = millis / 1000;
+        long minutes = seconds / 60;
+        seconds = seconds % 60;
+        return String.format("%02d:%02d", minutes, seconds);
+    }
+    
+    private String getIncomingEncryptionStatus() {
+        try {
+            int status = org.telegram.messenger.voip.NativeInstance.getIncomingEncryptionStatus();
+            int type = org.telegram.messenger.voip.NativeInstance.getIncomingEncryptionType();
+            
+            if (status == -1) { // NotYetDetermined
+                return "⏳ Connecting...";
+            } else if (status == 0) { // Unencrypted
+                return "❌ Not encrypted";
+            } else if (status == 1) { // DecryptionSuccess
+                String name = org.telegram.messenger.EncryptedCallsManager.getEncryptionName(type);
+                return "✅ " + (name != null ? name : "Unknown");
+            } else if (status == 2) { // DecryptionFailed
+                return "⚠️ Decryption failed";
+            } else {
+                return "Unknown";
+            }
+        } catch (Exception e) {
+            return "N/A";
+        }
+    }
+    
+    private void updateEncryptionStatusDisplay() {
+        if (encryptionStatusView == null) {
+            return;
+        }
+        
+        try {
+            org.telegram.messenger.EncryptedCallsManager encManager = org.telegram.messenger.EncryptedCallsManager.getInstance();
+            
+            // Check if encryption is configured at all
+            boolean hasOutgoing = encManager.hasOutgoingPassword();
+            boolean hasIncoming = encManager.getIncomingKeys().size() > 0;
+            
+            if (!hasOutgoing && !hasIncoming) {
+                encryptionStatusView.setVisibility(View.GONE);
+                return;
+            }
+            
+            StringBuilder status = new StringBuilder();
+            
+            // Outgoing status - show encryption type
+            if (hasOutgoing) {
+                String encTypeName = org.telegram.messenger.EncryptedCallsManager.getEncryptionName(encManager.getOutgoingEncryptionType());
+                String emoji = org.telegram.messenger.EncryptedCallsManager.getEncryptionEmoji(encManager.getOutgoingEncryptionType());
+                status.append(emoji).append(" ")
+                      .append(LocaleController.getString("OutgoingEncrypted", R.string.OutgoingEncrypted))
+                      .append(" ").append(encTypeName);
+            } else {
+                status.append("⚠️ ").append(LocaleController.getString("OutgoingUnencrypted", R.string.OutgoingUnencrypted));
+            }
+            
+            status.append("\n");
+            
+            // Incoming status - get from native code
+            // Status: -1 = NotYetDetermined (connecting), 0 = Unencrypted, 1 = DecryptionSuccess, 2 = DecryptionFailed
+            // EncType: -1 = not determined, 0 = AES-256, 1 = GOST, 2 = AES LITE, 3 = GOST LITE
+            int nativeStatus = -1;
+            int nativeEncType = -1;
+            try {
+                nativeStatus = org.telegram.messenger.voip.NativeInstance.getIncomingEncryptionStatus();
+                nativeEncType = org.telegram.messenger.voip.NativeInstance.getIncomingEncryptionType();
+            } catch (Exception e) {
+                // Native library might not be loaded yet
+            }
+            
+            if (nativeStatus == 1 && nativeEncType >= 0) {
+                // Decryption success with known type
+                String encTypeName = org.telegram.messenger.EncryptedCallsManager.getEncryptionName(nativeEncType);
+                String emoji = org.telegram.messenger.EncryptedCallsManager.getEncryptionEmoji(nativeEncType);
+                status.append(emoji).append(" ")
+                      .append(LocaleController.getString("IncomingDecrypted", R.string.IncomingDecrypted))
+                      .append(" ").append(encTypeName);
+                encryptionStatusView.setTextColor(Color.GREEN);
+                encryptionStatusView.setOnClickListener(null);
+            } else if (nativeStatus == 2) {
+                // Decryption failed
+                status.append("❌ ").append(LocaleController.getString("IncomingDecryptionFailed", R.string.IncomingDecryptionFailed));
+                status.append("\n").append(LocaleController.getString("TapToEnterKey", R.string.TapToEnterKey));
+                encryptionStatusView.setTextColor(Color.RED);
+                encryptionStatusView.setOnClickListener(v -> handleDecryptionFailedClick());
+            } else if (nativeStatus == -1) {
+                // Not yet determined - still connecting (no packets received yet)
+                status.append("⏳ ").append(LocaleController.getString("Connecting", R.string.Connecting));
+                encryptionStatusView.setTextColor(Color.WHITE);
+                encryptionStatusView.setOnClickListener(null);
+            } else if (nativeStatus == 0) {
+                // Unencrypted packets received
+                status.append("⚠️ ").append(LocaleController.getString("IncomingUnencrypted", R.string.IncomingUnencrypted));
+                encryptionStatusView.setTextColor(Color.YELLOW);
+                encryptionStatusView.setOnClickListener(null);
+            } else {
+                // Unknown status - treat as unencrypted
+                status.append("⚠️ ").append(LocaleController.getString("IncomingUnencrypted", R.string.IncomingUnencrypted));
+                encryptionStatusView.setTextColor(Color.YELLOW);
+                encryptionStatusView.setOnClickListener(null);
+            }
+            
+            encryptionStatusView.setText(status.toString());
+            encryptionStatusView.setVisibility(View.VISIBLE);
+        } catch (Exception e) {
+            encryptionStatusView.setVisibility(View.GONE);
+        }
+    }
+
+    /**
+     * Handles click when decryption failed
+     * First checks if Protected Zone password is cached, if not - asks for it
+     * Then tries to reload keys and retry decryption
+     * If still fails - shows call password dialog
+     */
+    private void handleDecryptionFailedClick() {
+        if (activity == null) return;
+        
+        org.telegram.messenger.HiddenChatsManager hiddenManager = org.telegram.messenger.HiddenChatsManager.getInstance();
+        org.telegram.messenger.EncryptedMessagesManager encManager = org.telegram.messenger.EncryptedMessagesManager.getInstance();
+        
+        // Check if Protected Zone password is set (not default "0000")
+        boolean hasRealPassword = hiddenManager.hasPassword() && !hiddenManager.isUsingDefaultPassword();
+        
+        // If Protected Zone password is not cached - ask for it first
+        if (hasRealPassword && !encManager.isPasswordCached()) {
+            showProtectedZonePasswordDialog(() -> {
+                // After password entered, reload keys and check if decryption works now
+                reloadKeysAndCheckDecryption();
+            });
+        } else {
+            // Password cached or not needed - show call password dialog directly
+            showEnterDecryptionKeyDialog();
+        }
+    }
+    
+    /**
+     * Shows Protected Zone password dialog before entering call key
+     */
+    private void showProtectedZonePasswordDialog(Runnable onSuccess) {
+        if (activity == null) return;
+        
+        android.app.AlertDialog.Builder builder = new android.app.AlertDialog.Builder(activity);
+        builder.setTitle(LocaleController.getString("EnterProtectedZonePassword", R.string.EnterProtectedZonePassword));
+        builder.setMessage(LocaleController.getString("ProtectedZonePasswordNeeded", R.string.ProtectedZonePasswordNeeded));
+        
+        android.widget.LinearLayout layout = new android.widget.LinearLayout(activity);
+        layout.setOrientation(android.widget.LinearLayout.VERTICAL);
+        layout.setPadding(dp(24), dp(8), dp(24), dp(0));
+        
+        android.widget.EditText passwordInput = new android.widget.EditText(activity);
+        passwordInput.setHint(LocaleController.getString("Password", R.string.Password));
+        passwordInput.setInputType(android.text.InputType.TYPE_CLASS_TEXT | android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD);
+        passwordInput.setSingleLine(true);
+        layout.addView(passwordInput);
+        
+        builder.setView(layout);
+        
+        builder.setPositiveButton(LocaleController.getString("OK", R.string.OK), (dialog, which) -> {
+            String password = passwordInput.getText().toString();
+            
+            if (org.telegram.messenger.HiddenChatsManager.getInstance().checkPasswordWithDecoy(password)) {
+                // Load encrypted messages manager with password
+                org.telegram.messenger.EncryptedMessagesManager.getInstance().loadWithPassword(password);
+                
+                // Also reload call keys
+                org.telegram.messenger.EncryptedCallsManager callsManager = org.telegram.messenger.EncryptedCallsManager.getInstance();
+                callsManager.reloadKeysToNative();
+                
+                // Run success callback
+                if (onSuccess != null) {
+                    onSuccess.run();
+                }
+            } else {
+                android.widget.Toast.makeText(activity, 
+                    LocaleController.getString("IncorrectPassword", R.string.IncorrectPassword), 
+                    android.widget.Toast.LENGTH_SHORT).show();
+            }
+        });
+        
+        builder.setNegativeButton(LocaleController.getString("Cancel", R.string.Cancel), (dialog, which) -> {
+            // Skip Protected Zone password - go directly to call key dialog
+            showEnterDecryptionKeyDialog();
+        });
+        
+        builder.show();
+    }
+    
+    /**
+     * Reloads keys from storage and checks if decryption works now
+     */
+    private void reloadKeysAndCheckDecryption() {
+        // Give some time for native to process new keys
+        AndroidUtilities.runOnUIThread(() -> {
+            try {
+                int status = org.telegram.messenger.voip.NativeInstance.getIncomingEncryptionStatus();
+                if (status == 1) {
+                    // Decryption now works!
+                    updateEncryptionStatusDisplay();
+                    android.widget.Toast.makeText(activity, 
+                        LocaleController.getString("DecryptionSuccessful", R.string.DecryptionSuccessful), 
+                        android.widget.Toast.LENGTH_SHORT).show();
+                } else {
+                    // Still not working - show call password dialog
+                    showEnterDecryptionKeyDialog();
+                }
+            } catch (Exception e) {
+                showEnterDecryptionKeyDialog();
+            }
+        }, 500);
+    }
+    
+    /**
+     * Shows a dialog to enter a decryption key during an active call
+     */
+    private void showEnterDecryptionKeyDialog() {
+        if (activity == null) return;
+        
+        android.app.AlertDialog.Builder builder = new android.app.AlertDialog.Builder(activity);
+        builder.setTitle(LocaleController.getString("EnterDecryptionKey", R.string.EnterDecryptionKey));
+        
+        android.widget.LinearLayout layout = new android.widget.LinearLayout(activity);
+        layout.setOrientation(android.widget.LinearLayout.VERTICAL);
+        layout.setPadding(dp(24), dp(8), dp(24), dp(0));
+        
+        // Key name input
+        android.widget.EditText nameInput = new android.widget.EditText(activity);
+        nameInput.setHint(LocaleController.getString("KeyName", R.string.KeyName));
+        // Default name with caller name and time
+        String defaultName = "";
+        if (callingUser != null) {
+            defaultName = org.telegram.messenger.ContactsController.formatName(
+                callingUser.first_name, callingUser.last_name);
+        }
+        defaultName += " " + android.text.format.DateFormat.format("dd.MM HH:mm", System.currentTimeMillis());
+        nameInput.setText(defaultName);
+        layout.addView(nameInput);
+        
+        // Password input
+        android.widget.EditText passwordInput = new android.widget.EditText(activity);
+        passwordInput.setHint(LocaleController.getString("Password", R.string.Password));
+        passwordInput.setInputType(android.text.InputType.TYPE_CLASS_TEXT | android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD);
+        layout.addView(passwordInput);
+        
+        // Save checkbox
+        android.widget.CheckBox saveCheckbox = new android.widget.CheckBox(activity);
+        saveCheckbox.setText(LocaleController.getString("SaveToKeyStorage", R.string.SaveToKeyStorage));
+        saveCheckbox.setChecked(true);
+        layout.addView(saveCheckbox);
+        
+        builder.setView(layout);
+        
+        builder.setPositiveButton(LocaleController.getString("OK", R.string.OK), (dialog, which) -> {
+            String name = nameInput.getText().toString().trim();
+            String password = passwordInput.getText().toString();
+            
+            if (password.isEmpty()) {
+                return;
+            }
+            
+            // Add key to manager
+            org.telegram.messenger.EncryptedCallsManager manager = org.telegram.messenger.EncryptedCallsManager.getInstance();
+            
+            // Add to incoming keys if save is checked
+            if (saveCheckbox.isChecked() && !name.isEmpty()) {
+                manager.addIncomingKey(name, password);
+            }
+            
+            // Also add to native for immediate use
+            try {
+                // Derive key and add to native
+                byte[] derivedKey = deriveKeyFromPassword(password);
+                org.telegram.messenger.voip.NativeInstance.addIncomingEncryptionKey(derivedKey);
+            } catch (Exception e) {
+                org.telegram.messenger.FileLog.e(e);
+            }
+            
+            // Update UI
+            updateEncryptionStatusDisplay();
+        });
+        
+        builder.setNegativeButton(LocaleController.getString("Cancel", R.string.Cancel), null);
+        builder.show();
+    }
+    
+    /**
+     * Derives a 256-bit key from password using PBKDF2
+     */
+    private byte[] deriveKeyFromPassword(String password) {
+        try {
+            byte[] salt = "EncryptedCallsSalt2024".getBytes(java.nio.charset.StandardCharsets.UTF_8);
+            javax.crypto.spec.PBEKeySpec spec = new javax.crypto.spec.PBEKeySpec(
+                password.toCharArray(), salt, 10000, 256);
+            javax.crypto.SecretKeyFactory factory = javax.crypto.SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256");
+            return factory.generateSecret(spec).getEncoded();
+        } catch (Exception e) {
+            // Fallback to simple SHA-256
+            try {
+                java.security.MessageDigest digest = java.security.MessageDigest.getInstance("SHA-256");
+                return digest.digest(password.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            } catch (Exception e2) {
+                return new byte[32];
+            }
         }
     }
 

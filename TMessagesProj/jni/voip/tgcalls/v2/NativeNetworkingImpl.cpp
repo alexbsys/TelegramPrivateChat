@@ -25,6 +25,7 @@
 #include "ReflectorPort.h"
 #include "FieldTrialsConfig.h"
 #include "EncryptedConnection.h"
+#include "../CustomFrameEncryption.h"
 
 namespace tgcalls {
 
@@ -424,23 +425,60 @@ private:
     
 private:
     void SendPacketInternal(rtc::CopyOnWriteBuffer &packet, const rtc::PacketOptions &options) {
-        if (const auto encryptedPacket = _transportEncryption->prepareForSendingRawMessage(packet, false)) {
+        // Apply custom frame encryption if outgoing key is set
+        auto& customEncryption = CustomFrameEncryption::getInstance();
+        rtc::CopyOnWriteBuffer packetToSend;
+        
+        if (customEncryption.hasOutgoingKey()) {
+            auto encrypted = customEncryption.encryptFrame(packet.data(), packet.size());
+            if (!encrypted.empty()) {
+                packetToSend.SetData(encrypted.data(), encrypted.size());
+            } else {
+                packetToSend = packet;
+            }
+        } else {
+            packetToSend = packet;
+        }
+        
+        if (const auto encryptedPacket = _transportEncryption->prepareForSendingRawMessage(packetToSend, false)) {
             _rawTransport->SendPacket((const char *)encryptedPacket->bytes.data(), encryptedPacket->bytes.size(), options);
         }
     }
     
     void ProcessReadPacketInternal(rtc::CopyOnWriteBuffer const &data, int64_t timestamp) {
-        if (data.size() >= 4) {
+        // Apply custom frame decryption if the packet is encrypted
+        auto& customEncryption = CustomFrameEncryption::getInstance();
+        const uint8_t* processData = data.data();
+        size_t processSize = data.size();
+        std::vector<uint8_t> decryptedData;
+        
+        if (customEncryption.isEncryptedFrame(data.data(), data.size())) {
+            bool decrypted = false;
+            bool wasEncrypted = false;
+            decryptedData = customEncryption.decryptFrame(data.data(), data.size(), decrypted, wasEncrypted);
+            
+            if (wasEncrypted && !decrypted) {
+                // Encrypted but couldn't decrypt - drop packet
+                return;
+            }
+            
+            if (!decryptedData.empty()) {
+                processData = decryptedData.data();
+                processSize = decryptedData.size();
+            }
+        }
+        
+        if (processSize >= 4) {
             uint32_t header = 0;
-            memcpy(&header, data.data(), 4);
+            memcpy(&header, processData, 4);
             uint32_t magic = 0xdcdcdcdc; // SCTP
             if (header == magic) {
-                SignalReadPacket(this, (const char *)(data.data() + 4), data.size() - 4, timestamp, 0);
+                SignalReadPacket(this, (const char *)(processData + 4), processSize - 4, timestamp, 0);
             } else {
-                SignalReadPacket(this, (const char *)data.data(), data.size(), timestamp, 1);
+                SignalReadPacket(this, (const char *)processData, processSize, timestamp, 1);
             }
         } else {
-            SignalReadPacket(this, (const char *)data.data(), data.size(), timestamp, 1);
+            SignalReadPacket(this, (const char *)processData, processSize, timestamp, 1);
         }
     }
     

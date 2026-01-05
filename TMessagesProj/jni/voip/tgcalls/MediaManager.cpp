@@ -8,6 +8,7 @@
 #include "Message.h"
 #include "platform/PlatformInterface.h"
 #include "StaticThreads.h"
+#include "CustomFrameEncryption.h"
 
 #include "api/enable_media.h"
 #include "api/environment/environment_factory.h"
@@ -999,15 +1000,35 @@ void MediaManager::receiveMessage(DecryptedMessage &&message) {
 	if (const auto formats = absl::get_if<VideoFormatsMessage>(data)) {
 		setPeerVideoFormats(std::move(*formats));
 	} else if (const auto audio = absl::get_if<AudioDataMessage>(data)) {
-        if (webrtc::IsRtcpPacket(audio->data)) {
+        // Try to decrypt incoming audio
+        auto& encryption = CustomFrameEncryption::getInstance();
+        bool decrypted = false;
+        bool wasEncrypted = false;
+        auto decryptedData = encryption.decryptFrame(audio->data.data(), audio->data.size(), decrypted, wasEncrypted);
+        
+        // Use decrypted data if available, otherwise original
+        rtc::CopyOnWriteBuffer processData;
+        if (wasEncrypted) {
+            if (decrypted && !decryptedData.empty()) {
+                processData = rtc::CopyOnWriteBuffer(decryptedData.data(), decryptedData.size());
+            } else {
+                // Encrypted but can't decrypt - drop packet
+                RTC_LOG(LS_WARNING) << "Cannot decrypt incoming audio packet";
+                return;
+            }
+        } else {
+            processData = audio->data;
+        }
+        
+        if (webrtc::IsRtcpPacket(processData)) {
             RTC_LOG(LS_VERBOSE) << "Deliver audio RTCP";
         }
         StaticThreads::getWorkerThread()->BlockingCall([&] {
-            if (webrtc::IsRtcpPacket(audio->data)) {
-                _call->Receiver()->DeliverRtcpPacket(audio->data);
+            if (webrtc::IsRtcpPacket(processData)) {
+                _call->Receiver()->DeliverRtcpPacket(processData);
             } else {
                 webrtc::RtpPacketReceived parsedPacket(&_audioRtpHeaderExtensionMap, webrtc::Timestamp::Micros(rtc::TimeUTCMicros()));
-                if (!parsedPacket.Parse(audio->data)) {
+                if (!parsedPacket.Parse(processData)) {
                   RTC_LOG(LS_ERROR)
                       << "Failed to parse the incoming RTP packet before demuxing. Drop it.";
                   return;
@@ -1019,12 +1040,32 @@ void MediaManager::receiveMessage(DecryptedMessage &&message) {
 	} else if (const auto video = absl::get_if<VideoDataMessage>(data)) {
 		if (_videoReceiveChannel) {
 			if (_readyToReceiveVideo) {
+                // Try to decrypt incoming video
+                auto& encryption = CustomFrameEncryption::getInstance();
+                bool decrypted = false;
+                bool wasEncrypted = false;
+                auto decryptedData = encryption.decryptFrame(video->data.data(), video->data.size(), decrypted, wasEncrypted);
+                
+                // Use decrypted data if available, otherwise original
+                rtc::CopyOnWriteBuffer processData;
+                if (wasEncrypted) {
+                    if (decrypted && !decryptedData.empty()) {
+                        processData = rtc::CopyOnWriteBuffer(decryptedData.data(), decryptedData.size());
+                    } else {
+                        // Encrypted but can't decrypt - drop packet
+                        RTC_LOG(LS_WARNING) << "Cannot decrypt incoming video packet";
+                        return;
+                    }
+                } else {
+                    processData = video->data;
+                }
+                
                 StaticThreads::getWorkerThread()->BlockingCall([&] {
-                    if (webrtc::IsRtcpPacket(video->data)) {
-                        _call->Receiver()->DeliverRtcpPacket(video->data);
+                    if (webrtc::IsRtcpPacket(processData)) {
+                        _call->Receiver()->DeliverRtcpPacket(processData);
                     } else {
                         webrtc::RtpPacketReceived parsedPacket(&_videoRtpHeaderExtensionMap, webrtc::Timestamp::Micros(rtc::TimeUTCMicros()));
-                        if (!parsedPacket.Parse(video->data)) {
+                        if (!parsedPacket.Parse(processData)) {
                           RTC_LOG(LS_ERROR)
                               << "Failed to parse the incoming RTP video packet before demuxing. Drop it.";
                           return;
@@ -1151,6 +1192,10 @@ _isVideo(isVideo) {
 }
 
 bool MediaManager::NetworkInterfaceImpl::SendPacket(rtc::CopyOnWriteBuffer *packet, const rtc::PacketOptions& options) {
+	static int sendPacketCount = 0;
+	if (sendPacketCount++ % 500 == 0) {
+		RTC_LOG(LS_INFO) << "NetworkInterfaceImpl::SendPacket called, isVideo=" << _isVideo << " size=" << packet->size() << " count=" << sendPacketCount;
+	}
 	return sendTransportMessage(packet, options);
 }
 
@@ -1159,12 +1204,36 @@ bool MediaManager::NetworkInterfaceImpl::SendRtcp(rtc::CopyOnWriteBuffer *packet
 }
 
 bool MediaManager::NetworkInterfaceImpl::sendTransportMessage(rtc::CopyOnWriteBuffer *packet, const rtc::PacketOptions& options) {
-    if (_isVideo) {
-        RTC_LOG(LS_VERBOSE) << "Send video packet";
+    static int transportCount = 0;
+    bool logThis = (transportCount++ % 500 == 0);
+    
+    if (logThis) {
+        RTC_LOG(LS_INFO) << "sendTransportMessage: isVideo=" << _isVideo << " size=" << packet->size() << " count=" << transportCount;
     }
-	_mediaManager->_sendTransportMessage(_isVideo
-		? Message{ VideoDataMessage{ *packet } }
-		: Message{ AudioDataMessage{ *packet } });
+    
+    // Try to encrypt the packet
+    auto& encryption = CustomFrameEncryption::getInstance();
+    bool hasKey = encryption.hasOutgoingKey();
+    
+    if (logThis) {
+        RTC_LOG(LS_INFO) << "sendTransportMessage: hasOutgoingKey=" << hasKey;
+    }
+    
+    auto encrypted = encryption.encryptFrame(packet->data(), packet->size());
+    
+    if (!encrypted.empty()) {
+        // Use encrypted data
+        rtc::CopyOnWriteBuffer encryptedPacket(encrypted.data(), encrypted.size());
+        _mediaManager->_sendTransportMessage(_isVideo
+            ? Message{ VideoDataMessage{ encryptedPacket } }
+            : Message{ AudioDataMessage{ encryptedPacket } });
+    } else {
+        // No encryption key set - send original
+        _mediaManager->_sendTransportMessage(_isVideo
+            ? Message{ VideoDataMessage{ *packet } }
+            : Message{ AudioDataMessage{ *packet } });
+    }
+    
 	rtc::SentPacket sentPacket(options.packet_id, rtc::TimeMillis(), options.info_signaled_after_sent);
 	_mediaManager->notifyPacketSent(sentPacket);
 	return true;

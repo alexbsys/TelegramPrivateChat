@@ -327,8 +327,14 @@ RtpVideoStreamReceiver2::RtpVideoStreamReceiver2(
                                                      &rtcp_feedback_buffer_);
   }
 
-  // Only construct the encrypted receiver if frame encryption is enabled.
-  if (config_.crypto_options.sframe.require_frame_encryption) {
+  // Construct the encrypted receiver if frame encryption is enabled OR if a decryptor is provided
+  // Modified: Also create BufferedFrameDecryptor when frame_decryptor is passed, even without
+  // require_frame_encryption flag, to support custom encryption like CryptoGram
+  if (config_.crypto_options.sframe.require_frame_encryption || frame_decryptor != nullptr) {
+    RTC_LOG(LS_INFO) << "RtpVideoStreamReceiver2: Creating BufferedFrameDecryptor, ssrc=" 
+                     << config_.rtp.remote_ssrc
+                     << ", require_frame_encryption=" << config_.crypto_options.sframe.require_frame_encryption
+                     << ", has_decryptor=" << (frame_decryptor != nullptr);
     buffered_frame_decryptor_ =
         std::make_unique<BufferedFrameDecryptor>(this, this, field_trials_);
     if (frame_decryptor != nullptr) {
@@ -742,6 +748,16 @@ void RtpVideoStreamReceiver2::OnRecoveredPacket(
 // via FlexFEC.
 void RtpVideoStreamReceiver2::OnRtpPacket(const RtpPacketReceived& packet) {
   RTC_DCHECK_RUN_ON(&packet_sequence_checker_);
+  
+  static int rtp_packet_count = 0;
+  rtp_packet_count++;
+  if (rtp_packet_count <= 10 || rtp_packet_count % 1000 == 0) {
+    RTC_LOG(LS_INFO) << "RtpVideoStreamReceiver2::OnRtpPacket #" << rtp_packet_count
+                     << ", ssrc=" << packet.Ssrc()
+                     << ", config_ssrc=" << config_.rtp.remote_ssrc
+                     << ", receiving=" << receiving_
+                     << ", has_decryptor=" << (buffered_frame_decryptor_ != nullptr);
+  }
 
   if (!receiving_)
     return;
@@ -930,11 +946,23 @@ void RtpVideoStreamReceiver2::OnAssembledFrame(
     last_assembled_frame_rtp_timestamp_ = frame->RtpTimestamp();
   }
 
+  static int video_frame_count = 0;
+  video_frame_count++;
+  
   if (buffered_frame_decryptor_ != nullptr) {
+    if (video_frame_count <= 5 || video_frame_count % 500 == 0) {
+      RTC_LOG(LS_INFO) << "RtpVideoStreamReceiver2: Frame #" << video_frame_count
+                       << " going to BufferedFrameDecryptor, ssrc=" << config_.rtp.remote_ssrc;
+    }
     buffered_frame_decryptor_->ManageEncryptedFrame(std::move(frame));
   } else if (frame_transformer_delegate_) {
     frame_transformer_delegate_->TransformFrame(std::move(frame));
   } else {
+    if (video_frame_count <= 5 || video_frame_count % 500 == 0) {
+      RTC_LOG(LS_WARNING) << "RtpVideoStreamReceiver2: Frame #" << video_frame_count
+                          << " BYPASSING decryptor (buffered_frame_decryptor_=null)! ssrc=" 
+                          << config_.rtp.remote_ssrc;
+    }
     OnCompleteFrames(reference_finder_->ManageFrame(std::move(frame)));
   }
 }
@@ -971,11 +999,17 @@ void RtpVideoStreamReceiver2::SetFrameDecryptor(
   // TODO(bugs.webrtc.org/11993): Update callers or post the operation over to
   // the network thread.
   RTC_DCHECK_RUN_ON(&packet_sequence_checker_);
+  RTC_LOG(LS_INFO) << "RtpVideoStreamReceiver2::SetFrameDecryptor called, ssrc=" 
+                   << config_.rtp.remote_ssrc
+                   << ", decryptor=" << (frame_decryptor ? "set" : "null")
+                   << ", buffered_decryptor_was=" << (buffered_frame_decryptor_ ? "set" : "null");
   if (buffered_frame_decryptor_ == nullptr) {
     buffered_frame_decryptor_ =
         std::make_unique<BufferedFrameDecryptor>(this, this, field_trials_);
+    RTC_LOG(LS_INFO) << "RtpVideoStreamReceiver2: Created BufferedFrameDecryptor";
   }
   buffered_frame_decryptor_->SetFrameDecryptor(std::move(frame_decryptor));
+  RTC_LOG(LS_INFO) << "RtpVideoStreamReceiver2: Decryptor SET successfully";
 }
 
 void RtpVideoStreamReceiver2::SetDepacketizerToDecoderFrameTransformer(

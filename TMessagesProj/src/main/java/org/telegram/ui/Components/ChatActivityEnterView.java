@@ -572,6 +572,7 @@ public class ChatActivityEnterView extends FrameLayout implements
     private long sentFromPreview;
     private ActionBarPopupWindow sendPopupWindow;
     private ActionBarPopupWindow.ActionBarPopupWindowLayout sendPopupLayout;
+    private ActionBarMenuSubItem sendEncryptionToggle;
     private ImageView cancelBotButton;
     private ChatActivityEnterViewAnimatedIconView emojiButton;
     @Nullable
@@ -4537,6 +4538,14 @@ public class ChatActivityEnterView extends FrameLayout implements
                     });
                     sendPopupLayout.addView(sendWithoutSoundButton, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, DEFAULT_HEIGHT));
                 }
+                
+                // Add encryption toggle button (created once, updated before showing)
+                if (dialog_id != 0) {
+                    sendEncryptionToggle = new ActionBarMenuSubItem(getContext(), false, true, resourcesProvider);
+                    sendEncryptionToggle.setMinimumWidth(dp(196));
+                    sendPopupLayout.addView(sendEncryptionToggle, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, DEFAULT_HEIGHT));
+                }
+                
                 sendPopupLayout.setupRadialSelectors(getThemedColor(Theme.key_dialogButtonSelector));
 
                 sendPopupWindow = new ActionBarPopupWindow(sendPopupLayout, LayoutHelper.WRAP_CONTENT, LayoutHelper.WRAP_CONTENT) {
@@ -4571,6 +4580,46 @@ public class ChatActivityEnterView extends FrameLayout implements
                     sendWhenOnlineButton.setVisibility(GONE);
                 }
             }
+            // Update encryption toggle state before showing
+            if (sendEncryptionToggle != null && dialog_id != 0) {
+                EncryptedMessagesManager encManager = EncryptedMessagesManager.getInstance();
+                boolean isEncryptionEnabled = encManager.isEncryptionEnabled(dialog_id);
+                boolean hasPassword = encManager.getChatPassword(dialog_id) != null;
+                String emoji = getEncryptionEmoji();
+                
+                if (isEncryptionEnabled && hasPassword) {
+                    sendEncryptionToggle.setTextAndIcon(emoji + " " + LocaleController.getString("SendWithoutEncryption", R.string.SendWithoutEncryption), 0);
+                } else if (hasPassword) {
+                    sendEncryptionToggle.setTextAndIcon("🔓 " + LocaleController.getString("SendWithEncryption", R.string.SendWithEncryption), 0);
+                } else {
+                    sendEncryptionToggle.setTextAndIcon("🔐 " + LocaleController.getString("SetupEncryption", R.string.SetupEncryption), 0);
+                }
+                
+                sendEncryptionToggle.setOnClickListener(v -> {
+                    if (sendPopupWindow != null && sendPopupWindow.isShowing()) {
+                        sendPopupWindow.dismiss();
+                    }
+                    if (!hasPassword) {
+                        // Open encryption setup
+                        if (parentFragment != null) {
+                            parentFragment.showEncryptedMessagesDialog();
+                        }
+                    } else {
+                        // Toggle encryption for this chat
+                        if (isEncryptionEnabled) {
+                            encManager.setEncryptionEnabled(dialog_id, false);
+                        } else {
+                            encManager.setEncryptionEnabled(dialog_id, true);
+                        }
+                        // Update UI
+                        if (parentFragment != null) {
+                            parentFragment.updateEncryptedMessagesMenuItem();
+                        }
+                    }
+                });
+                sendEncryptionToggle.setVisibility(VISIBLE);
+            }
+            
             sendPopupLayout.measure(MeasureSpec.makeMeasureSpec(dp(1000), MeasureSpec.AT_MOST), MeasureSpec.makeMeasureSpec(dp(1000), MeasureSpec.AT_MOST));
             sendPopupWindow.setFocusable(true);
             view.getLocationInWindow(location);
@@ -6375,7 +6424,7 @@ public class ChatActivityEnterView extends FrameLayout implements
                     // Check if encryption is active for this chat
                     String hintText = getString(R.string.TypeMessage);
                     if (isEncryptionActiveForCurrentChat()) {
-                        hintText = "🔒 " + hintText;
+                        hintText = getEncryptionEmoji() + " " + hintText;
                     }
                     messageEditText.setHintText(hintText);
                 }
@@ -7299,7 +7348,8 @@ public class ChatActivityEnterView extends FrameLayout implements
                 if (encManager.isEncryptionEnabled(dialog_id)) {
                     String password = encManager.getChatPassword(dialog_id);
                     if (password != null) {
-                        String encrypted = encManager.encryptMessage(messageText, password);
+                        int encType = encManager.getChatEncryptionType(dialog_id);
+                        String encrypted = encManager.encryptMessage(messageText, password, encType);
                         if (encrypted != null) {
                             messageText = encrypted;
                             // Clear entities for encrypted message
@@ -13915,6 +13965,20 @@ public class ChatActivityEnterView extends FrameLayout implements
         return encManager.isPasswordCached() && 
                encManager.isEncryptionEnabled(dialog_id) && 
                !encManager.isInDecoyMode();
+    }
+    
+    /**
+     * Get encryption emoji based on current encryption type for this chat
+     * Returns 🔒 for AES, 🔑 for GOST
+     */
+    private String getEncryptionEmoji() {
+        if (dialog_id == 0) {
+            return "🔒";
+        }
+        EncryptedMessagesManager encManager = EncryptedMessagesManager.getInstance();
+        int encType = encManager.getChatEncryptionType(dialog_id);
+        // encType 1 = GOST, otherwise AES
+        return (encType == 1) ? "🔑" : "🔒";
     }
     
     /**

@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="AppName">CryptoGram</string>
-    <string name="AppNameBeta">CryptoGram Beta</string>
+    <string name="AppName">CipherGram</string>
+    <string name="AppNameBeta">CipherGram Beta</string>
     <string name="LanguageName">English</string>
     <string name="English">English</string>
     <string name="LanguageNameInEnglish">English</string>
@@ -2472,6 +2472,10 @@
     <string name="NotificationsPriorityUrgent">Urgent</string>
     <string name="RepeatNotificationsNever">Never</string>
     <string name="RepeatNotifications">Repeat Notifications</string>
+    <string name="BatteryOptimization">Battery Optimization</string>
+    <string name="BatteryOptimizationEnabled">Enabled (may delay notifications)</string>
+    <string name="BatteryOptimizationDisabled">Disabled (recommended)</string>
+    <string name="BatteryOptimizationAlreadyDisabled">Battery optimization is already disabled for this app</string>
     <string name="PhoneNumberHelp">You can change your Telegram number here. Your account and all your cloud data — messages, media, contacts, etc. will be moved to the new number.</string>
     <string name="PhoneNumberAlert">Users will see your new number if they have it in their address book or your privacy settings allow them to see it. You can modify this in Settings &gt; Privacy and Security &gt; Phone number.</string>
     <string name="PhoneNumberChange2">Change Number</string>
@@ -3629,6 +3633,7 @@
     <string name="Open">Open</string>
     <string name="Save">Save</string>
     <string name="Cancel">Cancel</string>
+    <string name="Exit">Exit</string>
     <string name="Reduce">Reduce</string>
     <string name="Close">Close</string>
     <string name="Change">Change</string>
@@ -10202,7 +10207,7 @@
     <string name="SetupProtectedZonePassword">Setup Protected Zone Password</string>
     <string name="HideChat">Hide Chat</string>
     <string name="UnhideChat">Unhide Chat</string>
-    <string name="SecurityPassword">Security Password</string>
+    <string name="SecurityPassword">Decoy Password</string>
     <string name="SecurityPasswordSet">set</string>
     <string name="SecurityPasswordNotSet">not set</string>
     <string name="CurrentPassword">Current Password</string>
@@ -10215,6 +10220,13 @@
     <string name="IncorrectPassword">Incorrect password</string>
     <string name="PasswordChangedSuccessfully">Password changed successfully</string>
     <string name="Success">Success</string>
+    <string name="SetCustomPassword">Set Custom Password</string>
+    <string name="SetCustomPasswordMessage">We recommend setting a custom password for the Protected Zone to enhance security. You can also skip this and use the default password \"0000\".</string>
+    <string name="DontUsePassword">Don\'t use password</string>
+    <string name="DefaultPasswordMessage">Protected Zone password is not set. Use password 0000 to access hidden chats.</string>
+    <string name="CurrentPasswordOptional">Current password (optional)</string>
+    <string name="RemovePassword">Remove password</string>
+    <string name="PasswordRemovedMessage">Password has been removed. Protected Zone is now accessible without a password.</string>
     <string name="Error">Error</string>
     <string name="AlreadyHidden">Already Hidden</string>
     <string name="ChatAlreadyHidden">This chat is already hidden.</string>
@@ -10228,19 +10240,20 @@
     <string name="HiddenChatsCount">Hidden Chats (%d)</string>
     <string name="NoHiddenChatsYet">No hidden chats yet. Use \'Hide Chat\' to add any chat to the hidden list.</string>
     <string name="HiddenChatsInfo">These chats are hidden from the main list and only visible when you enter the password in search. Tap on a chat to unhide it.</string>
-    <string name="SecurityPasswordTitle">Security Password</string>
-    <string name="SecurityPasswordIsSet">Security password is set.\n\nWhen you enter this password instead of the real one, an empty hidden chats list will be shown. Use this if someone forces you to reveal your hidden chats.</string>
-    <string name="SecurityPasswordNotSetMessage">Set a security password that shows an empty hidden chats list.\n\nUse this if someone forces you to reveal your hidden chats - enter this password instead of the real one, and they will see nothing.</string>
+    <string name="SecurityPasswordTitle">Decoy Password</string>
+    <string name="SecurityPasswordIsSet">Decoy password is set.\n\nWhen you enter this password instead of the real one, an empty hidden chats list will be shown. Use this if someone forces you to reveal your hidden chats.</string>
+    <string name="SecurityPasswordNotSetMessage">Set a decoy password that shows an empty hidden chats list.\n\nUse this if someone forces you to reveal your hidden chats - enter this password instead of the real one, and they will see nothing.</string>
     <string name="SetPassword">Set Password</string>
-    <string name="SetSecurityPassword">Set Security Password</string>
-    <string name="SecurityPasswordMustBeDifferent">Security password must be different from your main password.</string>
-    <string name="SecurityPasswordSetSuccess">Security password set successfully.\n\nWhen you enter this password in search, an empty list will be shown.</string>
-    <string name="SecurityPasswordRemoved">Security password has been removed.</string>
+    <string name="SetSecurityPassword">Set Decoy Password</string>
+    <string name="SecurityPasswordMustBeDifferent">Decoy password must be different from your main password.</string>
+    <string name="SecurityPasswordSetSuccess">Decoy password set successfully.\n\nWhen you enter this password in search, an empty list will be shown.</string>
+    <string name="SecurityPasswordRemoved">Decoy password has been removed.</string>
     <string name="Removed">Removed</string>
     <string name="Enter">Enter</string>
     
     <!-- Encrypted Messages -->
     <string name="EncryptedMessages">Encrypted Messages</string>
+    <string name="EncryptedMessage">Encrypted message</string>
     <string name="NeedHiddenChatsPassword">You need to set up a hidden chats password first. Go to menu → Advanced Safety Control.</string>
     <string name="EnterHiddenPasswordFirst">Please enter your hidden chats password first by searching for it in the main chat list.</string>
     <string name="EncryptedMessagesEnabledInfo">Encrypted messages are enabled for this chat. You can send encrypted messages using the lock button.</string>
@@ -10254,12 +10267,55 @@
     <string name="AskPasswordDisabled">Disabled</string>
     <string name="AskPasswordAlways">Always</string>
     <string name="AskPasswordIfEncrypted">If encrypted chats exist</string>
+    <string name="AskPasswordBlockApp">Block app without password</string>
     <string name="AskPasswordIfEncryptedShort">If encrypted</string>
     <string name="DuplicateDetection">Duplicate message detection</string>
     <string name="DuplicateDetectionInfo">Number of recent messages to check for duplicates. Set to 0 to disable. Detects when someone resends your encrypted message.</string>
     <string name="Disabled">Disabled</string>
     <string name="ProtectedZonePassword">Protected Zone Password</string>
+    
+    <!-- Encrypted Calls -->
+    <string name="EncryptedCalls">Encrypted Calls</string>
+    <string name="OutgoingCallPassword">Outgoing call encryption</string>
+    <string name="EncryptionType">Encryption algorithm</string>
+    <string name="EncryptionTypeSet">Encryption set to %1$s</string>
+    <string name="EncryptionAlgorithm">Encryption algorithm</string>
+    <string name="EncryptedCall">Encrypted call</string>
+    <string name="EncryptedCallMenu">Зашифрованный звонок</string>
+    <string name="EncryptedCallNeedsSetup">To make encrypted calls, you need to set up encryption password in Advanced Safety Control first.</string>
+    <string name="EncryptedCallNeedsSetupRu">Для совершения зашифрованных звонков необходимо сначала настроить пароль шифрования в Расширенных настройках безопасности.</string>
+    <string name="EncryptedSearch">Search in encrypted messages</string>
+    <string name="Unlimited">Unlimited</string>
+    <string name="SendWithoutEncryption">Send without encryption</string>
+    <string name="SendWithEncryption">Send encrypted</string>
+    <string name="SetupEncryption">Set up encryption</string>
+    <string name="TapToEnterKey">Tap to enter key</string>
+    <string name="EnterDecryptionKey">Enter decryption key</string>
+    <string name="KeyName">Key name</string>
+    <string name="SaveToKeyStorage">Save to key storage</string>
+    <string name="OutgoingCallPasswordInfo">Set a password to encrypt your outgoing audio and video during calls. The other party needs to have this password in their incoming keys list to decrypt.</string>
+    <string name="IncomingCallKeys">Incoming call keys</string>
+    <string name="AddIncomingKey">Add incoming key</string>
+    <string name="EditIncomingKey">Edit key</string>
+    <string name="EncryptedCallsInfo">Encrypted calls use additional encryption layer on top of Telegram\'s encryption. Both parties must use matching passwords.</string>
+
+    <!-- Call Encryption Status -->
+    <string name="OutgoingEncrypted">Outgoing: Encrypted</string>
+    <string name="OutgoingUnencrypted">Outgoing: Unencrypted</string>
+    <string name="IncomingDecrypted">Incoming: Decrypted</string>
+    <string name="IncomingDecryptionFailed">Incoming: No matching key</string>
+    <string name="IncomingUnencrypted">Incoming: Unencrypted</string>
     <string name="NeedProtectedZonePassword">You need to set a Protected Zone password first. Go to Advanced Safety Control in the menu.</string>
+    <string name="ProtectedZonePasswordNeeded">Protected Zone password is required to access stored encryption keys. Enter it or skip to enter call password directly.</string>
+    <string name="DecryptionSuccessful">Decryption successful!</string>
+    <string name="BatteryOptimizationTitle">Battery Optimization Detected</string>
+    <string name="BatteryOptimizationMessage">Your phone has battery optimization enabled for CipherGram. This may prevent incoming calls and messages when the app is in the background.\n\nTo receive calls and notifications reliably, please disable battery optimization for this app.</string>
+    <string name="DisableOptimization">Disable Now</string>
+    <string name="ShowInstructions">Show Instructions</string>
+    <string name="BatteryOptimizationInstructions">How to Disable Battery Optimization</string>
+    <string name="BatteryOptimizationInstructionsText">1. Open your phone Settings\n\n2. Go to \"Apps\" or \"Applications\"\n\n3. Find \"CipherGram\" and tap on it\n\n4. Go to \"Battery\" settings\n\n5. Select \"Unrestricted\" or \"Don\'t optimize\"\n\nNote: Some manufacturers (Xiaomi, Huawei, Samsung) have additional power-saving features that may need to be disabled separately in their battery or power management settings.</string>
+    <string name="OpenSettings">Open Settings</string>
+    <string name="Later">Later</string>
     <string name="ChatEncryptionPassword">Chat Encryption Password</string>
     <string name="EnterProtectedZonePasswordFirst">Enter your Protected Zone password to access encrypted messages settings.</string>
     <string name="ProtectedZonePasswordRequired">Protected Zone password is required</string>
@@ -10268,6 +10324,25 @@
     <string name="AdvancedCallSettings">Advanced Call Settings</string>
     <string name="CallSettings">Call Settings</string>
     <string name="ForceWebRTC">Force WebRTC mode</string>
+    <string name="VideoCodec">Video Codec</string>
+    <string name="VideoCodecInfo">Force specific video codec for calls. H.265 offers better quality at lower bitrates. H.264 has broader compatibility.</string>
+    <string name="ShowDebugInfo">Show Debug Info</string>
+    <string name="ShowDebugInfoHint">Display technical information overlay during calls: TURN servers, codecs, packet counts, bitrates</string>
+    
+    <!-- Call control -->
+    <string name="CallControl">Call Control</string>
+    <string name="CallControlInfo">Manage incoming calls: block unwanted callers, allow only specific contacts, or set up automatic answer for trusted contacts.</string>
+    <string name="Blacklist">Blacklist</string>
+    <string name="BlacklistInfo">Calls from contacts in the blacklist will be automatically rejected without any notification.</string>
+    <string name="Whitelist">Whitelist</string>
+    <string name="WhitelistEnabled">Whitelist Mode</string>
+    <string name="WhitelistInfo">When whitelist mode is enabled, only calls from contacts in the whitelist will be accepted. All other calls will be rejected.</string>
+    <string name="AutoAnswer">Auto Answer</string>
+    <string name="AutoAnswerInfo">Calls from contacts in this list will be automatically answered without user interaction.</string>
+    <string name="AutoAnswerMode">Auto Answer Mode</string>
+    <string name="AudioCallsOnly">Audio calls only</string>
+    <string name="AudioAndVideoCalls">Audio and video calls</string>
+    <string name="ChangeMode">Change Mode</string>
     <string name="UseTCPForTurn">Use TCP for TURN</string>
     <string name="CallSettingsInfo">Enable WebRTC mode to use standard TURN servers instead of Telegram reflectors. Disable P2P to force all traffic through relay servers. This may help if calls are blocked in your region.</string>
     <string name="ShareCallSettings">Copy settings to clipboard</string>

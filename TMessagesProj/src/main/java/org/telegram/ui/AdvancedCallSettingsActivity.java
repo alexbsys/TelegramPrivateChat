@@ -60,7 +60,15 @@ public class AdvancedCallSettingsActivity extends BaseFragment {
     private int useTCPRow;
     private int disableP2PRow;
     private int replaceStandardRow;
+    private int videoCodecRow;
+    private int showDebugInfoRow;
     private int settingsInfoRow;
+    private int callControlHeaderRow;
+    private int blacklistRow;
+    private int whitelistEnabledRow;
+    private int whitelistRow;
+    private int autoAnswerRow;
+    private int callControlInfoRow;
     private int shareSettingsRow;
     private int importSettingsRow;
     private int turnServersHeaderRow;
@@ -94,15 +102,20 @@ public class AdvancedCallSettingsActivity extends BaseFragment {
         }
         serverModeInfoRow = rowCount++;
         
+        // Video Codec and Debug Info - always visible regardless of server mode
+        settingsHeaderRow = rowCount++;
+        videoCodecRow = rowCount++;
+        showDebugInfoRow = rowCount++;
+        settingsInfoRow = rowCount++;
+        
         // Hide manual settings when server mode is enabled
         if (!useCallServer) {
-            // WebRTC settings section
-            settingsHeaderRow = rowCount++;
+            // WebRTC settings section (continued)
             forceWebRTCRow = rowCount++;
             useTCPRow = rowCount++;
             disableP2PRow = rowCount++;
             replaceStandardRow = rowCount++;
-            settingsInfoRow = rowCount++;
+            
             shareSettingsRow = rowCount++;
             importSettingsRow = rowCount++;
             
@@ -121,13 +134,11 @@ public class AdvancedCallSettingsActivity extends BaseFragment {
             addTurnServerRow = rowCount++;
             turnServersInfoRow = rowCount++;
         } else {
-            // Hide all manual settings
-            settingsHeaderRow = -1;
+            // Hide manual settings but not Video Codec and Debug Info
             forceWebRTCRow = -1;
             useTCPRow = -1;
             disableP2PRow = -1;
             replaceStandardRow = -1;
-            settingsInfoRow = -1;
             shareSettingsRow = -1;
             importSettingsRow = -1;
             turnServersHeaderRow = -1;
@@ -136,6 +147,14 @@ public class AdvancedCallSettingsActivity extends BaseFragment {
             addTurnServerRow = -1;
             turnServersInfoRow = -1;
         }
+        
+        // Call control moved to Advanced Safety Control - hide here
+        callControlHeaderRow = -1;
+        blacklistRow = -1;
+        whitelistEnabledRow = -1;
+        whitelistRow = -1;
+        autoAnswerRow = -1;
+        callControlInfoRow = -1;
     }
 
     @Override
@@ -215,6 +234,28 @@ public class AdvancedCallSettingsActivity extends BaseFragment {
                         ((TextCheckCell) view).setChecked(false);
                     }
                 }
+            } else if (position == videoCodecRow) {
+                showVideoCodecDialog();
+            } else if (position == showDebugInfoRow) {
+                CallSettingsManager manager = CallSettingsManager.getInstance();
+                boolean newValue = !manager.isShowDebugInfo();
+                manager.setShowDebugInfo(newValue);
+                if (view instanceof TextCheckCell) {
+                    ((TextCheckCell) view).setChecked(newValue);
+                }
+            } else if (position == blacklistRow) {
+                presentFragment(new CallListActivity(CallListActivity.TYPE_BLACKLIST));
+            } else if (position == whitelistEnabledRow) {
+                CallSettingsManager manager = CallSettingsManager.getInstance();
+                boolean newValue = !manager.isWhitelistEnabled();
+                manager.setWhitelistEnabled(newValue);
+                if (view instanceof TextCheckCell) {
+                    ((TextCheckCell) view).setChecked(newValue);
+                }
+            } else if (position == whitelistRow) {
+                presentFragment(new CallListActivity(CallListActivity.TYPE_WHITELIST));
+            } else if (position == autoAnswerRow) {
+                presentFragment(new CallListActivity(CallListActivity.TYPE_AUTO_ANSWER));
             } else if (position == addTurnServerRow) {
                 showAddTurnServerDialog(null, -1);
             } else if (position == shareSettingsRow) {
@@ -462,6 +503,8 @@ public class AdvancedCallSettingsActivity extends BaseFragment {
                         headerCell.setText(LocaleController.getString("CallSettings", R.string.CallSettings));
                     } else if (position == turnServersHeaderRow) {
                         headerCell.setText(LocaleController.getString("TurnServers", R.string.TurnServers));
+                    } else if (position == callControlHeaderRow) {
+                        headerCell.setText(LocaleController.getString("CallControl", R.string.CallControl));
                     }
                     break;
                 case 1: // TextCell
@@ -475,6 +518,18 @@ public class AdvancedCallSettingsActivity extends BaseFragment {
                     } else if (position == importSettingsRow) {
                         textCell.setTextAndIcon(LocaleController.getString("ImportCallSettings", R.string.ImportCallSettings), R.drawable.msg_download, false);
                         textCell.setColors(Theme.key_windowBackgroundWhiteBlueText4, Theme.key_windowBackgroundWhiteBlueText4);
+                    } else if (position == blacklistRow) {
+                        int count = CallSettingsManager.getInstance().getBlacklist().size();
+                        String value = count > 0 ? String.valueOf(count) : "0";
+                        textCell.setTextAndValue(LocaleController.getString("Blacklist", R.string.Blacklist), value, true);
+                    } else if (position == whitelistRow) {
+                        int count = CallSettingsManager.getInstance().getWhitelist().size();
+                        String value = count > 0 ? String.valueOf(count) : "0";
+                        textCell.setTextAndValue(LocaleController.getString("Whitelist", R.string.Whitelist), value, true);
+                    } else if (position == autoAnswerRow) {
+                        int count = CallSettingsManager.getInstance().getAutoAnswerList().size();
+                        String value = count > 0 ? String.valueOf(count) : "0";
+                        textCell.setTextAndValue(LocaleController.getString("AutoAnswer", R.string.AutoAnswer), value, false);
                     } else if (position == callServerUrlRow) {
                         String url = CallSettingsManager.getInstance().getCallServerUrl();
                         String value = (url != null && !url.isEmpty()) ? url : LocaleController.getString("NotSet", R.string.NotSet);
@@ -484,6 +539,9 @@ public class AdvancedCallSettingsActivity extends BaseFragment {
                         textCell.setColors(Theme.key_windowBackgroundWhiteBlueText4, Theme.key_windowBackgroundWhiteBlueText4);
                     } else if (position == tariffInfoRow) {
                         textCell.setText(LocaleController.getString("TariffInfoHint", R.string.TariffInfoHint), false);
+                    } else if (position == videoCodecRow) {
+                        textCell.setTextAndValue(LocaleController.getString("VideoCodec", R.string.VideoCodec), 
+                            CallSettingsManager.getInstance().getVideoCodecName(), false);
                     }
                     break;
                 case 2: // TextCheckCell
@@ -498,7 +556,11 @@ public class AdvancedCallSettingsActivity extends BaseFragment {
                     } else if (position == disableP2PRow) {
                         checkCell.setTextAndCheck(LocaleController.getString("DisableP2P", R.string.DisableP2P), manager.isDisableP2P(), true);
                     } else if (position == replaceStandardRow) {
-                        checkCell.setTextAndCheck(LocaleController.getString("ReplaceStandardServers", R.string.ReplaceStandardServers), manager.isReplaceStandardServers(), false);
+                        checkCell.setTextAndCheck(LocaleController.getString("ReplaceStandardServers", R.string.ReplaceStandardServers), manager.isReplaceStandardServers(), true);
+                    } else if (position == showDebugInfoRow) {
+                        checkCell.setTextAndCheck(LocaleController.getString("ShowDebugInfo", R.string.ShowDebugInfo), manager.isShowDebugInfo(), true);
+                    } else if (position == whitelistEnabledRow) {
+                        checkCell.setTextAndCheck(LocaleController.getString("WhitelistEnabled", R.string.WhitelistEnabled), manager.isWhitelistEnabled(), true);
                     }
                     break;
                 case 3: // Turn/Stun server
@@ -524,6 +586,9 @@ public class AdvancedCallSettingsActivity extends BaseFragment {
                     } else if (position == settingsInfoRow) {
                         infoCell.setText(LocaleController.getString("CallSettingsInfo", R.string.CallSettingsInfo));
                         infoCell.setBackgroundDrawable(Theme.getThemedDrawableByKey(mContext, R.drawable.greydivider, Theme.key_windowBackgroundGrayShadow));
+                    } else if (position == callControlInfoRow) {
+                        infoCell.setText(LocaleController.getString("CallControlInfo", R.string.CallControlInfo));
+                        infoCell.setBackgroundDrawable(Theme.getThemedDrawableByKey(mContext, R.drawable.greydivider, Theme.key_windowBackgroundGrayShadow));
                     } else if (position == turnServersInfoRow) {
                         infoCell.setText(LocaleController.getString("TurnServersInfo", R.string.TurnServersInfo));
                         infoCell.setBackgroundDrawable(Theme.getThemedDrawableByKey(mContext, R.drawable.greydivider_bottom, Theme.key_windowBackgroundGrayShadow));
@@ -534,13 +599,17 @@ public class AdvancedCallSettingsActivity extends BaseFragment {
 
         @Override
         public int getItemViewType(int position) {
-            if (position == serverModeHeaderRow || position == settingsHeaderRow || position == turnServersHeaderRow) {
+            if (position == serverModeHeaderRow || position == settingsHeaderRow || position == turnServersHeaderRow
+                    || position == callControlHeaderRow) {
                 return 0; // Header
             } else if (position == addTurnServerRow || position == shareSettingsRow || position == importSettingsRow 
-                    || position == callServerUrlRow || position == checkTariffRow || position == tariffInfoRow) {
+                    || position == callServerUrlRow || position == checkTariffRow || position == tariffInfoRow
+                    || position == videoCodecRow || position == blacklistRow || position == whitelistRow 
+                    || position == autoAnswerRow) {
                 return 1; // TextCell
             } else if (position == useCallServerRow || position == forceWebRTCRow || position == useTCPRow 
-                    || position == disableP2PRow || position == replaceStandardRow) {
+                    || position == disableP2PRow || position == replaceStandardRow || position == showDebugInfoRow
+                    || position == whitelistEnabledRow) {
                 return 2; // TextCheckCell
             } else if (position >= turnServersStartRow && position < turnServersEndRow) {
                 return 3; // Turn server
@@ -711,6 +780,32 @@ public class AdvancedCallSettingsActivity extends BaseFragment {
                 LocaleController.getString("CallSettingsCopied", R.string.CallSettingsCopied)
             ).show();
         }
+    }
+    
+    private void showVideoCodecDialog() {
+        Context context = getParentActivity();
+        if (context == null) return;
+        
+        AlertDialog.Builder builder = new AlertDialog.Builder(context);
+        builder.setTitle(LocaleController.getString("VideoCodec", R.string.VideoCodec));
+        
+        String[] options = new String[]{
+            "Auto",
+            "H.264",
+            "H.265 (HEVC)"
+        };
+        
+        int currentCodec = CallSettingsManager.getInstance().getPreferredVideoCodec();
+        
+        builder.setItems(options, (dialog, which) -> {
+            CallSettingsManager.getInstance().setPreferredVideoCodec(which);
+            if (listAdapter != null) {
+                listAdapter.notifyDataSetChanged();
+            }
+        });
+        
+        builder.setNegativeButton(LocaleController.getString("Cancel", R.string.Cancel), null);
+        builder.show();
     }
     
     @Override

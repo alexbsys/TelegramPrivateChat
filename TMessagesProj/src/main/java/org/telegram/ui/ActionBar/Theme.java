@@ -4998,8 +4998,12 @@ public class Theme {
                 if (customDefault != null) {
                     applyingTheme = customDefault;
                     currentDayTheme = customDefault;
+                    // Apply custom accent if specified
+                    if (org.telegram.messenger.BuildVars.DEFAULT_THEME_ACCENT_ID >= 0) {
+                        customDefault.currentAccentId = org.telegram.messenger.BuildVars.DEFAULT_THEME_ACCENT_ID;
+                    }
                 } else {
-                    applyingTheme = defaultTheme;
+            applyingTheme = defaultTheme;
                 }
             } else {
                 applyingTheme = defaultTheme;
@@ -10148,7 +10152,8 @@ public class Theme {
     }
 
     public static Drawable createDefaultWallpaper(int w, int h) {
-        MotionBackgroundDrawable motionBackgroundDrawable = new MotionBackgroundDrawable(0xffdbddbb, 0xff6ba587, 0xffd5d88d, 0xff88b884, w != 0);
+        // CipherGram: Changed from green to yellow tones
+        MotionBackgroundDrawable motionBackgroundDrawable = new MotionBackgroundDrawable(0xffF5E6B8, 0xffD4A857, 0xffE8C547, 0xffC4983D, w != 0);
         if (w <= 0 || h <= 0) {
             w = Math.min(AndroidUtilities.displaySize.x, AndroidUtilities.displaySize.y);
             h = Math.max(AndroidUtilities.displaySize.x, AndroidUtilities.displaySize.y);
