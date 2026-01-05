@@ -44547,13 +44547,14 @@ public class ChatActivity extends BaseFragment implements
         ArrayList<Integer> actions = new ArrayList<>();
         
         // Regular call
-        items.add(isVideoCall ? LocaleController.getString("VideoCall", R.string.VideoCall) : LocaleController.getString("Call", R.string.Call));
+        String regularLabel = (isVideoCall ? "📹 " : "📞 ") + 
+            (isVideoCall ? LocaleController.getString("VideoCall", R.string.VideoCall) : LocaleController.getString("Call", R.string.Call));
+        items.add(regularLabel);
         icons.add(isVideoCall ? R.drawable.msg_videocall : R.drawable.msg_calls);
         actions.add(0); // action: regular call
         
         // Encrypted call
-        String encryptedLabel = (isVideoCall ? "🔒 " : "🔒 ") + 
-            LocaleController.getString("EncryptedCall", R.string.EncryptedCall);
+        String encryptedLabel = "🔒 " + LocaleController.getString("EncryptedCallMenu", R.string.EncryptedCallMenu);
         items.add(encryptedLabel);
         icons.add(R.drawable.msg_secret);
         actions.add(1); // action: encrypted call

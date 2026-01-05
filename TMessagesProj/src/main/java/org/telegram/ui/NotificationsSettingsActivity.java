@@ -131,6 +131,7 @@ public class NotificationsSettingsActivity extends BaseFragment implements Notif
     private int badgeNumberSection2Row;
     private int androidAutoAlertRow;
     private int repeatRow;
+    private int batteryOptimizationRow;
     private int resetSection2Row;
     private int resetSectionRow;
     private int resetNotificationsRow;
@@ -197,6 +198,7 @@ public class NotificationsSettingsActivity extends BaseFragment implements Notif
         notificationsServiceConnectionRow = rowCount++;
         androidAutoAlertRow = -1;
         repeatRow = rowCount++;
+        batteryOptimizationRow = rowCount++;
         resetSection2Row = rowCount++;
         resetSectionRow = rowCount++;
         resetNotificationsRow = rowCount++;
@@ -757,6 +759,15 @@ public class NotificationsSettingsActivity extends BaseFragment implements Notif
                 });
                 builder.setNegativeButton(getString("Cancel", R.string.Cancel), null);
                 showDialog(builder.create());
+            } else if (position == batteryOptimizationRow) {
+                Activity activity = getParentActivity();
+                if (activity != null) {
+                    if (AndroidUtilities.isIgnoringBatteryOptimizations()) {
+                        Toast.makeText(activity, getString("BatteryOptimizationAlreadyDisabled", R.string.BatteryOptimizationAlreadyDisabled), Toast.LENGTH_SHORT).show();
+                    } else {
+                        AndroidUtilities.requestIgnoreBatteryOptimizations(activity);
+                    }
+                }
             }
             if (view instanceof TextCheckCell) {
                 ((TextCheckCell) view).setChecked(!enabled);
@@ -1140,8 +1151,15 @@ public class NotificationsSettingsActivity extends BaseFragment implements Notif
                         } else {
                             value = LocaleController.formatPluralString("Hours", minutes / 60);
                         }
-                        textCell.setTextAndValue(getString("RepeatNotifications", R.string.RepeatNotifications), value, updateRepeatNotifications, false);
+                        textCell.setTextAndValue(getString("RepeatNotifications", R.string.RepeatNotifications), value, updateRepeatNotifications, true);
                         updateRepeatNotifications = false;
+                    } else if (position == batteryOptimizationRow) {
+                        boolean isOptimized = AndroidUtilities.isIgnoringBatteryOptimizations();
+                        textCell.setTextAndValue(
+                            getString("BatteryOptimization", R.string.BatteryOptimization), 
+                            isOptimized ? getString("BatteryOptimizationDisabled", R.string.BatteryOptimizationDisabled) : getString("BatteryOptimizationEnabled", R.string.BatteryOptimizationEnabled), 
+                            false
+                        );
                     }
                     break;
                 }

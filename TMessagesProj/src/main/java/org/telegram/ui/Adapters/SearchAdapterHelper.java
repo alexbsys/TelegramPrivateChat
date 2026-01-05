@@ -298,10 +298,16 @@ public class SearchAdapterHelper {
                 hasChanged = false;
             }
         }
-        if (!canAddGroupsOnly && phoneNumbers && query.startsWith("+") && query.length() > 3) {
+        // Enhanced phone number search: works with "+" prefix or pure numeric queries (3+ digits)
+        String strippedQuery = PhoneFormat.stripExceptNumbers(query);
+        boolean isPhoneQuery = (!canAddGroupsOnly && phoneNumbers && 
+            (query.startsWith("+") && query.length() > 3) || 
+            (strippedQuery.length() >= 3 && strippedQuery.equals(query.replaceAll("[^0-9]", ""))));
+        
+        if (isPhoneQuery) {
             phonesSearch.clear();
             phoneSearchMap.clear();
-            String phone = PhoneFormat.stripExceptNumbers(query);
+            String phone = strippedQuery;
             ArrayList<TLRPC.TL_contact> arrayList = ContactsController.getInstance(currentAccount).contacts;
             boolean hasFullMatch = false;
             for (int a = 0, N = arrayList.size(); a < N; a++) {
@@ -310,7 +316,8 @@ public class SearchAdapterHelper {
                 if (user == null) {
                     continue;
                 }
-                if (user.phone != null && user.phone.startsWith(phone)) {
+                // Search for phone number containing the query (not just starting with)
+                if (user.phone != null && user.phone.contains(phone)) {
                     if (!hasFullMatch) {
                         hasFullMatch = user.phone.length() == phone.length();
                     }
@@ -318,7 +325,7 @@ public class SearchAdapterHelper {
                     phoneSearchMap.put(user.id, user);
                 }
             }
-            if (!hasFullMatch) {
+            if (!hasFullMatch && query.startsWith("+")) {
                 phonesSearch.add("section");
                 phonesSearch.add(phone);
             }

@@ -28,6 +28,7 @@ public class BuildVars {
 
     // Custom fork settings
     public static String DEFAULT_THEME = "Dark Blue"; // Default theme for our fork
+    public static int DEFAULT_THEME_ACCENT_ID = 7; // Yellow accent (0xffeebd34)
 
     // works only on official app ids, disable on your forks
     public static boolean SUPPORTS_PASSKEYS = false; //true;

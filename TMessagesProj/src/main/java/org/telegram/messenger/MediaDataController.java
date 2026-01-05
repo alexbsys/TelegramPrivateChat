@@ -3739,6 +3739,8 @@ public class MediaDataController extends BaseController {
         searchResultMessages.clear();
         searchServerResultMessages.clear();
         searchLocalResultMessages.clear();
+        // CipherGram: Cancel any ongoing encrypted message search
+        EncryptedMessagesManager.getInstance().cancelEncryptedSearch();
     }
 
     public boolean isMessageFound(int messageId, boolean mergeDialog) {
@@ -3865,6 +3867,46 @@ public class MediaDataController extends BaseController {
             searchServerResultMessagesMap[0].clear();
             searchServerResultMessagesMap[1].clear();
             getNotificationCenter().postNotificationName(NotificationCenter.chatSearchResultsLoading, guid);
+            
+            // CipherGram: Also search in encrypted messages locally
+            EncryptedMessagesManager encManager = EncryptedMessagesManager.getInstance();
+            if (encManager.isEncryptedSearchEnabled() && encManager.isPasswordCached() 
+                    && encManager.chatHasEncryptedMessages(dialogId)) {
+                final String searchQuery = query;
+                final int searchGuid = guid;
+                final long searchDialogId = dialogId;
+                final java.util.HashSet<Integer> addedEncryptedIds = new java.util.HashSet<>();
+                
+                encManager.searchEncryptedMessagesWithObjects(searchDialogId, searchQuery, encManager.getCachedPassword(), currentAccount, (loadedMessages) -> {
+                    if (!loadedMessages.isEmpty()) {
+                        int addedCount = 0;
+                        for (MessageObject mo : loadedMessages) {
+                            // Skip if already added (for incremental results)
+                            if (addedEncryptedIds.contains(mo.getId())) {
+                                continue;
+                            }
+                            // Skip if already in regular search results
+                            boolean found = false;
+                            for (MessageObject existing : searchResultMessages) {
+                                if (existing.getId() == mo.getId()) {
+                                    found = true;
+                                    break;
+                                }
+                            }
+                            if (!found) {
+                                searchResultMessages.add(mo);
+                                addedEncryptedIds.add(mo.getId());
+                                addedCount++;
+                            }
+                        }
+                        if (addedCount > 0) {
+                            messagesSearchCount[0] += addedCount;
+                            getNotificationCenter().postNotificationName(NotificationCenter.chatSearchResultsAvailable, searchGuid, 
+                                searchResultMessages.isEmpty() ? 0 : searchResultMessages.get(0).getId(), getMask(), searchDialogId, 0, getSearchCount(), true);
+                        }
+                    }
+                });
+            }
         }
         final boolean isHashtag = query != null && (query.trim().startsWith("#") || query.trim().startsWith("$"));
         if (messagesSearchEndReached[0] && !messagesSearchEndReached[1] && mergeDialogId != 0) {

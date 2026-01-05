@@ -34,6 +34,7 @@ import androidx.annotation.NonNull;
 
 import com.google.android.gms.common.ConnectionResult;
 import com.google.android.gms.common.GooglePlayServicesUtil;
+import com.google.firebase.crashlytics.FirebaseCrashlytics;
 
 import org.json.JSONObject;
 import org.telegram.messenger.voip.VideoCapturerDevice;
@@ -291,6 +292,19 @@ public class ApplicationLoader extends Application {
 
         super.onCreate();
 
+        // Initialize Firebase Crashlytics
+        try {
+            FirebaseCrashlytics crashlytics = FirebaseCrashlytics.getInstance();
+            crashlytics.setCrashlyticsCollectionEnabled(true);
+            // Set custom keys for device info
+            crashlytics.setCustomKey("device_model", Build.MODEL);
+            crashlytics.setCustomKey("device_manufacturer", Build.MANUFACTURER);
+            crashlytics.setCustomKey("android_version", Build.VERSION.RELEASE);
+            crashlytics.setCustomKey("sdk_version", Build.VERSION.SDK_INT);
+        } catch (Exception e) {
+            // Crashlytics not available (e.g., in debug builds without google-services.json)
+        }
+
         if (BuildVars.LOGS_ENABLED) {
             FileLog.d("app start time = " + (startTime = SystemClock.elapsedRealtime()));
             try {
@@ -345,7 +359,9 @@ public class ApplicationLoader extends Application {
         AndroidUtilities.runOnUIThread(ApplicationLoader::startPushService);
 
         // Initialize HiddenChatsManager early to load CRC filter for chat filtering
-        HiddenChatsManager.getInstance();
+        // Also initialize first start with default password "0000" if needed
+        HiddenChatsManager manager = HiddenChatsManager.getInstance();
+        manager.initializeFirstStart();
         
         LauncherIconController.tryFixLauncherIconIfNeeded();
         ProxyRotationController.init();
@@ -357,7 +373,8 @@ public class ApplicationLoader extends Application {
         if (preferences.contains("pushService")) {
             enabled = preferences.getBoolean("pushService", true);
         } else {
-            enabled = MessagesController.getMainSettings(UserConfig.selectedAccount).getBoolean("keepAliveService", false);
+            // Default to true for CipherGram to ensure push notifications work in background
+            enabled = MessagesController.getMainSettings(UserConfig.selectedAccount).getBoolean("keepAliveService", true);
         }
         if (enabled) {
             try {

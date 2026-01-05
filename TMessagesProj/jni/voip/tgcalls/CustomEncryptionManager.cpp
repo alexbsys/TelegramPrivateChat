@@ -45,7 +45,13 @@ void CustomEncryptionManager::clearIncomingKeys() {
     _incomingKeys.clear();
     _lastIncomingStatus = EncryptionStatusManager::NotYetDetermined;
     _incomingEncryptionType = -1; // Reset to "not yet determined"
-    LOGI("clearIncomingKeys: keys cleared, encryption type reset");
+    // Reset traffic stats and codec for new call
+    _bytesSent.store(0, std::memory_order_relaxed);
+    _bytesReceived.store(0, std::memory_order_relaxed);
+    _audioBytesSent.store(0, std::memory_order_relaxed);
+    _audioBytesReceived.store(0, std::memory_order_relaxed);
+    _incomingVideoCodec.store(0, std::memory_order_relaxed);
+    LOGI("clearIncomingKeys: keys, stats, and codec reset");
 }
 
 size_t CustomEncryptionManager::getIncomingKeyCount() const {
@@ -119,6 +125,46 @@ int CustomEncryptionManager::getIncomingEncryptionType() const {
 void CustomEncryptionManager::setIncomingEncryptionType(int type) {
     std::lock_guard<std::mutex> lock(_mutex);
     _incomingEncryptionType = type;
+}
+
+// Traffic stats tracking
+void CustomEncryptionManager::addBytesSent(size_t bytes, bool isAudio) {
+    _bytesSent.fetch_add(bytes, std::memory_order_relaxed);
+    if (isAudio) {
+        _audioBytesSent.fetch_add(bytes, std::memory_order_relaxed);
+    }
+}
+
+void CustomEncryptionManager::addBytesReceived(size_t bytes, bool isAudio) {
+    _bytesReceived.fetch_add(bytes, std::memory_order_relaxed);
+    if (isAudio) {
+        _audioBytesReceived.fetch_add(bytes, std::memory_order_relaxed);
+    }
+}
+
+void CustomEncryptionManager::getTrafficStats(uint64_t& sent, uint64_t& received, 
+                                              uint64_t& audioSent, uint64_t& audioReceived) const {
+    sent = _bytesSent.load(std::memory_order_relaxed);
+    received = _bytesReceived.load(std::memory_order_relaxed);
+    audioSent = _audioBytesSent.load(std::memory_order_relaxed);
+    audioReceived = _audioBytesReceived.load(std::memory_order_relaxed);
+}
+
+void CustomEncryptionManager::resetTrafficStats() {
+    _bytesSent.store(0, std::memory_order_relaxed);
+    _bytesReceived.store(0, std::memory_order_relaxed);
+    _audioBytesSent.store(0, std::memory_order_relaxed);
+    _audioBytesReceived.store(0, std::memory_order_relaxed);
+    LOGI("resetTrafficStats: counters reset");
+}
+
+// Video codec detection
+void CustomEncryptionManager::setIncomingVideoCodec(int codecType) {
+    _incomingVideoCodec.store(codecType, std::memory_order_relaxed);
+}
+
+int CustomEncryptionManager::getIncomingVideoCodec() const {
+    return _incomingVideoCodec.load(std::memory_order_relaxed);
 }
 
 } // namespace tgcalls

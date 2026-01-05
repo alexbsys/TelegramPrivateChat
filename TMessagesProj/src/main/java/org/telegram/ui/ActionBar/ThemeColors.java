@@ -34,19 +34,19 @@ public class ThemeColors {
         defaultColors[key_dialogGrayLine] = 0xffd2d2d2;
         defaultColors[key_dialogTopBackground] = 0xff6fb2e5;
         defaultColors[key_dialogInputField] = 0xffdbdbdb;
-        defaultColors[key_dialogInputFieldActivated] = 0xff37a9f0;
-        defaultColors[key_dialogCheckboxSquareBackground] = 0xff43a0df;
+        defaultColors[key_dialogInputFieldActivated] = 0xFFB8860B;  // CipherGram: dark yellow
+        defaultColors[key_dialogCheckboxSquareBackground] = 0xFFB8860B;  // CipherGram: dark yellow
         defaultColors[key_dialogCheckboxSquareCheck] = 0xffffffff;
         defaultColors[key_dialogCheckboxSquareUnchecked] = 0xff737373;
         defaultColors[key_dialogCheckboxSquareDisabled] = 0xffb0b0b0;
         defaultColors[key_dialogRadioBackground] = 0xffb3b3b3;
-        defaultColors[key_dialogRadioBackgroundChecked] = 0xff37a9f0;
-        defaultColors[key_dialogLineProgress] = 0xff527da3;
+        defaultColors[key_dialogRadioBackgroundChecked] = 0xFFB8860B;  // CipherGram: dark yellow
+        defaultColors[key_dialogLineProgress] = 0xFFB8860B;  // CipherGram: dark yellow
         defaultColors[key_dialogLineProgressBackground] = 0xffdbdbdb;
         defaultColors[key_dialogButton] = 0xff4991cc;
         defaultColors[key_dialogButtonSelector] = 0x0f000000;
         defaultColors[key_dialogScrollGlow] = 0xfff5f6f7;
-        defaultColors[key_dialogRoundCheckBox] = 0xff4cb4f5;
+        defaultColors[key_dialogRoundCheckBox] = 0xFFB8860B;  // CipherGram: dark yellow
         defaultColors[key_dialogRoundCheckBoxCheck] = 0xffffffff;
         defaultColors[key_dialogCameraIcon] = 0xffffffff;
         defaultColors[key_dialog_inlineProgressBackground] = 0xf6f0f2f5;
@@ -55,7 +55,7 @@ public class ThemeColors {
         defaultColors[key_dialogSearchHint] = 0xff98a0a7;
         defaultColors[key_dialogSearchIcon] = 0xffa1a8af;
         defaultColors[key_dialogSearchText] = 0xff222222;
-        defaultColors[key_dialogFloatingButton] = 0xff4cb4f5;
+        defaultColors[key_dialogFloatingButton] = 0xFFB8860B;  // CipherGram: dark yellow
         defaultColors[key_dialogFloatingButtonPressed] = 0x0f000000;
         defaultColors[key_dialogFloatingIcon] = 0xffffffff;
         defaultColors[key_dialogShadowLine] = 0x12000000;
@@ -75,9 +75,9 @@ public class ThemeColors {
 
         defaultColors[key_windowBackgroundWhite] = 0xffffffff;
         defaultColors[key_windowBackgroundUnchecked] = 0xff9da7b1;
-        defaultColors[key_windowBackgroundChecked] = 0xff579ed9;
+        defaultColors[key_windowBackgroundChecked] = 0xFFB8860B;  // CipherGram: dark yellow
         defaultColors[key_windowBackgroundCheckText] = 0xffffffff;
-        defaultColors[key_progressCircle] = 0xff1c93e3;
+        defaultColors[key_progressCircle] = 0xFFB8860B;  // CipherGram: dark yellow
         defaultColors[key_windowBackgroundWhiteGrayIcon] = 0xff81868b;
         defaultColors[key_windowBackgroundWhiteBlueText] = 0xff4092cd;
         defaultColors[key_windowBackgroundWhiteBlueText2] = 0xff3a95d5;
@@ -86,8 +86,8 @@ public class ThemeColors {
         defaultColors[key_windowBackgroundWhiteBlueText5] = 0xff4c8eca;
         defaultColors[key_windowBackgroundWhiteBlueText6] = 0xff3a8ccf;
         defaultColors[key_windowBackgroundWhiteBlueText7] = 0xff377aae;
-        defaultColors[key_windowBackgroundWhiteBlueButton] = 0xff1e88d3;
-        defaultColors[key_windowBackgroundWhiteBlueIcon] = 0xff379de5;
+        defaultColors[key_windowBackgroundWhiteBlueButton] = 0xFFB8860B;  // CipherGram: dark yellow
+        defaultColors[key_windowBackgroundWhiteBlueIcon] = 0xFFB8860B;  // CipherGram: dark yellow
         defaultColors[key_windowBackgroundWhiteGreenText] = 0xff26972c;
         defaultColors[key_windowBackgroundWhiteGreenText2] = 0xff37a818;
         defaultColors[key_text_RedRegular] = 0xffcc2929;
@@ -108,39 +108,39 @@ public class ThemeColors {
         defaultColors[key_windowBackgroundWhiteLinkSelection] = 0x3362a9e3;
         defaultColors[key_windowBackgroundWhiteBlueHeader] = 0xff3a95d5;
         defaultColors[key_windowBackgroundWhiteInputField] = 0xffdbdbdb;
-        defaultColors[key_windowBackgroundWhiteInputFieldActivated] = 0xff37a9f0;
+        defaultColors[key_windowBackgroundWhiteInputFieldActivated] = 0xFFB8860B;  // CipherGram: dark yellow
         defaultColors[key_switchTrack] = 0xffb0b5ba;
-        defaultColors[key_switchTrackChecked] = 0xff52ade9;
+        defaultColors[key_switchTrackChecked] = 0xFFB8860B;  // CipherGram: dark yellow
         defaultColors[key_switchTrackBlue] = 0xff828e99;
-        defaultColors[key_switchTrackBlueChecked] = 0xff3c88c7;
+        defaultColors[key_switchTrackBlueChecked] = 0xFFB8860B;  // CipherGram: dark yellow
         defaultColors[key_switchTrackBlueThumb] = 0xffffffff;
         defaultColors[key_switchTrackBlueThumbChecked] = 0xffffffff;
         defaultColors[key_switchTrackBlueSelector] = 0x17404a53;
         defaultColors[key_switchTrackBlueSelectorChecked] = 0x21024781;
         defaultColors[key_switch2Track] = 0xfff57e7e;
-        defaultColors[key_switch2TrackChecked] = 0xff52ade9;
-        defaultColors[key_checkboxSquareBackground] = 0xff43a0df;
+        defaultColors[key_switch2TrackChecked] = 0xFFB8860B;  // CipherGram: dark yellow
+        defaultColors[key_checkboxSquareBackground] = 0xFFB8860B;  // CipherGram: dark yellow
         defaultColors[key_checkboxSquareCheck] = 0xffffffff;
         defaultColors[key_checkboxSquareUnchecked] = 0xff737373;
         defaultColors[key_checkboxSquareDisabled] = 0xffb0b0b0;
         defaultColors[key_listSelector] = 0x0f000000;
         defaultColors[key_radioBackground] = 0xffb3b3b3;
-        defaultColors[key_radioBackgroundChecked] = 0xff37a9f0;
+        defaultColors[key_radioBackgroundChecked] = 0xFFB8860B;  // CipherGram: dark yellow
         defaultColors[key_windowBackgroundGray] = 0xfff0f0f0;
         defaultColors[key_windowBackgroundGrayShadow] = 0xff000000;
         defaultColors[key_emptyListPlaceholder] = 0xff959595;
         defaultColors[key_divider] = 0xffd9d9d9;
         defaultColors[key_graySection] = 0xfff5f5f5;
         defaultColors[key_graySectionText] = 0xff82878A;
-        defaultColors[key_contextProgressInner1] = 0xffbfdff6;
-        defaultColors[key_contextProgressOuter1] = 0xff2b96e2;
+        defaultColors[key_contextProgressInner1] = 0xffFFF0C0;  // CipherGram: light yellow
+        defaultColors[key_contextProgressOuter1] = 0xFFB8860B;  // CipherGram: dark yellow
         defaultColors[key_contextProgressInner2] = 0xffbfdff6;
         defaultColors[key_contextProgressOuter2] = 0xffffffff;
         defaultColors[key_contextProgressInner3] = 0xffb3b3b3;
         defaultColors[key_contextProgressOuter3] = 0xffffffff;
         defaultColors[key_contextProgressInner4] = 0xffcacdd0;
         defaultColors[key_contextProgressOuter4] = 0xff2f3438;
-        defaultColors[key_fastScrollActive] = 0xff52a3db;
+        defaultColors[key_fastScrollActive] = 0xFFB8860B;  // CipherGram: dark yellow
         defaultColors[key_fastScrollInactive] = 0xffc9cdd1;
         defaultColors[key_fastScrollText] = 0xffffffff;
 
@@ -167,10 +167,10 @@ public class ThemeColors {
         defaultColors[key_avatar_backgroundGray] = 0xffA1ABB5;
 
 
-        defaultColors[key_avatar_backgroundInProfileBlue] = 0xff5085b1;
-        defaultColors[key_avatar_backgroundActionBarBlue] = 0xff598fba;
-        defaultColors[key_avatar_subtitleInProfileBlue] = 0xffd7eafa;
-        defaultColors[key_avatar_actionBarSelectorBlue] = 0xff4981ad;
+        defaultColors[key_avatar_backgroundInProfileBlue] = 0xFFB8860B;  // CipherGram: dark yellow
+        defaultColors[key_avatar_backgroundActionBarBlue] = 0xFFB8860B;  // CipherGram: dark yellow
+        defaultColors[key_avatar_subtitleInProfileBlue] = 0xffFFF0C0;  // CipherGram: light yellow
+        defaultColors[key_avatar_actionBarSelectorBlue] = 0xFF9A7209;  // CipherGram: darker yellow
         defaultColors[key_avatar_actionBarIconBlue] = 0xffffffff;
 
         defaultColors[key_avatar_nameInMessageRed] = 0xffCC5049;
@@ -181,14 +181,14 @@ public class ThemeColors {
         defaultColors[key_avatar_nameInMessageBlue] = 0xff368AD1;
         defaultColors[key_avatar_nameInMessagePink] = 0xffC7508B;
 
-        defaultColors[key_actionBarDefault] = 0xff527da3;
+        defaultColors[key_actionBarDefault] = 0xFFB8860B;  // CipherGram: dark yellow
         defaultColors[key_actionBarDefaultIcon] = 0xffffffff;
         defaultColors[key_actionBarActionModeDefault] = 0xffffffff;
         defaultColors[key_actionBarActionModeDefaultTop] = 0x10000000;
         defaultColors[key_actionBarActionModeDefaultIcon] = 0xff676a6f;
         defaultColors[key_actionBarDefaultTitle] = 0xffffffff;
-        defaultColors[key_actionBarDefaultSubtitle] = 0xffd5e8f7;
-        defaultColors[key_actionBarDefaultSelector] = 0xff406d94;
+        defaultColors[key_actionBarDefaultSubtitle] = 0xffFFF0C0;  // CipherGram: light yellow
+        defaultColors[key_actionBarDefaultSelector] = 0xFF9A7209;  // CipherGram: darker yellow
         defaultColors[key_actionBarWhiteSelector] = 0x1d000000;
         defaultColors[key_actionBarDefaultSearch] = 0xffffffff;
         defaultColors[key_actionBarDefaultSearchPlaceholder] = 0x88ffffff;
@@ -201,9 +201,9 @@ public class ThemeColors {
         defaultColors[key_actionBarActionModeReactionText] = 0xff82868a;
         defaultColors[key_actionBarActionModeReactionDot] = 0xffc0c0c0;
         defaultColors[key_actionBarTabActiveText] = 0xffffffff;
-        defaultColors[key_actionBarTabUnactiveText] = 0xffd5e8f7;
+        defaultColors[key_actionBarTabUnactiveText] = 0xffFFF0C0;  // CipherGram: light yellow
         defaultColors[key_actionBarTabLine] = 0xffffffff;
-        defaultColors[key_actionBarTabSelector] = 0xff406d94;
+        defaultColors[key_actionBarTabSelector] = 0xFF9A7209;  // CipherGram: darker yellow
         defaultColors[key_actionBarBrowser] = 0xffffffff;
 
         defaultColors[key_table_background] = 0xfff7f7f7;
@@ -220,7 +220,7 @@ public class ThemeColors {
         defaultColors[key_chats_unreadCounter] = 0xff4ecc5e;
         defaultColors[key_chats_unreadCounterMuted] = 0xffc6c9cc;
         defaultColors[key_chats_unreadCounterText] = 0xffffffff;
-        defaultColors[key_chats_archiveBackground] = 0xff66a9e0;
+        defaultColors[key_chats_archiveBackground] = 0xFFB8860B;  // CipherGram: dark yellow
         defaultColors[key_chats_archivePinBackground] = 0xff9faab3;
         defaultColors[key_chats_archiveIcon] = 0xffffffff;
         defaultColors[key_chats_archiveText] = 0xffffffff;
@@ -237,8 +237,8 @@ public class ThemeColors {
         defaultColors[key_chats_nameMessageArchived] = 0xff8b8d8f;
         defaultColors[key_chats_nameMessage_threeLines] = 0xff424449;
         defaultColors[key_chats_nameMessageArchived_threeLines] = 0xff5e5e5e;
-        defaultColors[key_chats_attachMessage] = 0xff3c7eb0;
-        defaultColors[key_chats_actionMessage] = 0xff3c7eb0;
+        defaultColors[key_chats_attachMessage] = 0xFFB8860B;  // CipherGram: dark yellow
+        defaultColors[key_chats_actionMessage] = 0xFFB8860B;  // CipherGram: dark yellow
         defaultColors[key_chats_date] = 0xff95999C;
         defaultColors[key_chats_pinnedOverlay] = 0x08000000;
         defaultColors[key_chats_tabletSelectedOverlay] = 0x0f000000;
@@ -257,13 +257,13 @@ public class ThemeColors {
         defaultColors[key_chats_menuItemIcon] = 0xff889198;
         defaultColors[key_chats_menuName] = 0xffffffff;
         defaultColors[key_chats_menuPhone] = 0xffffffff;
-        defaultColors[key_chats_menuPhoneCats] = 0xffc2e5ff;
+        defaultColors[key_chats_menuPhoneCats] = 0xffFFF0C0;  // CipherGram: light yellow
         defaultColors[key_chats_actionIcon] = 0xffffffff;
-        defaultColors[key_chats_actionBackground] = 0xff65a9e0;
-        defaultColors[key_chats_actionPressedBackground] = 0xff569dd6;
-        defaultColors[key_chats_menuTopBackgroundCats] = 0xff598fba;
+        defaultColors[key_chats_actionBackground] = 0xFFB8860B;  // CipherGram: dark yellow (FAB)
+        defaultColors[key_chats_actionPressedBackground] = 0xFF9A7209;  // CipherGram: darker yellow
+        defaultColors[key_chats_menuTopBackgroundCats] = 0xFFB8860B;  // CipherGram: dark yellow
         defaultColors[key_chats_archivePullDownBackground] = 0xffc6c9cc;
-        defaultColors[key_chats_archivePullDownBackgroundActive] = 0xff66a9e0;
+        defaultColors[key_chats_archivePullDownBackgroundActive] = 0xFFB8860B;  // CipherGram: dark yellow
 
         defaultColors[key_chat_attachCheckBoxCheck] = 0xffffffff;
         defaultColors[key_chat_attachCheckBoxBackground] = 0xff4cb4f5;
@@ -304,10 +304,10 @@ public class ThemeColors {
         defaultColors[key_chat_inBubble] = 0xffffffff;
         defaultColors[key_chat_inBubbleSelected] = 0xffecf7fd;
         defaultColors[key_chat_inBubbleShadow] = 0xff1d3753;
-        defaultColors[key_chat_outBubble] = 0xffefffde;
+        defaultColors[key_chat_outBubble] = 0xffFFF4D6;  // CipherGram: light yellow outgoing bubble
         defaultColors[key_chat_outBubbleGradientSelectedOverlay] = 0x14000000;
-        defaultColors[key_chat_outBubbleSelected] = 0xffd9f7c5;
-        defaultColors[key_chat_outBubbleShadow] = 0xff1e750c;
+        defaultColors[key_chat_outBubbleSelected] = 0xffFFE9B3;  // CipherGram: selected yellow
+        defaultColors[key_chat_outBubbleShadow] = 0xff8B6914;  // CipherGram: dark yellow shadow
         defaultColors[key_chat_inMediaIcon] = 0xffffffff;
         defaultColors[key_chat_inMediaIconSelected] = 0xffeff8fe;
         defaultColors[key_chat_outMediaIcon] = 0xffefffde;
@@ -496,7 +496,7 @@ public class ThemeColors {
         defaultColors[key_chat_recordedVoiceProgress] = 0xffB1DEFF;
         defaultColors[key_chat_recordedVoiceProgressInner] = 0xffffffff;
         defaultColors[key_chat_recordVoiceCancel] = 0xff3A95D4;
-        defaultColors[key_chat_messagePanelSend] = 0xFF229AF0;
+        defaultColors[key_chat_messagePanelSend] = 0xFFB8860B;  // CipherGram: dark yellow
         defaultColors[key_chat_messagePanelVoiceLock] = 0xffa4a4a4;
         defaultColors[key_chat_messagePanelVoiceLockBackground] = 0xffffffff;
         defaultColors[key_chat_messagePanelVoiceLockShadow] = 0xff000000;
@@ -519,12 +519,12 @@ public class ThemeColors {
         defaultColors[key_chat_topPanelLine] = 0xff6c9fd2;
         defaultColors[key_chat_topPanelTitle] = 0xff3a8ccf;
         defaultColors[key_chat_topPanelMessage] = 0xff878e91;
-        defaultColors[key_chat_addContact] = 0xff4a82b5;
-        defaultColors[key_chat_inLoader] = 0xff72b5e8;
-        defaultColors[key_chat_inLoaderSelected] = 0xff65abe0;
+        defaultColors[key_chat_addContact] = 0xFFB8860B;  // CipherGram: dark yellow
+        defaultColors[key_chat_inLoader] = 0xFFB8860B;  // CipherGram: dark yellow
+        defaultColors[key_chat_inLoaderSelected] = 0xFF9A7209;  // CipherGram: darker yellow
         defaultColors[key_chat_outLoader] = 0xff78c272;
         defaultColors[key_chat_outLoaderSelected] = 0xff6ab564;
-        defaultColors[key_chat_inLoaderPhoto] = 0xffa2b8c8;
+        defaultColors[key_chat_inLoaderPhoto] = 0xFFB8860B;  // CipherGram: dark yellow
         defaultColors[key_chat_mediaLoaderPhoto] = 0x66000000;
         defaultColors[key_chat_mediaLoaderPhotoSelected] = 0x7f000000;
         defaultColors[key_chat_mediaLoaderPhotoIcon] = 0xffffffff;
@@ -537,14 +537,14 @@ public class ThemeColors {
         defaultColors[key_profile_actionIcon] = 0xff81868a;
         defaultColors[key_profile_actionBackground] = 0xffffffff;
         defaultColors[key_profile_actionPressedBackground] = 0xfff2f2f2;
-        defaultColors[key_profile_verifiedBackground] = 0xffb2d6f8;
-        defaultColors[key_profile_verifiedCheck] = 0xff4983b8;
+        defaultColors[key_profile_verifiedBackground] = 0xffFFF0C0;  // CipherGram: light yellow
+        defaultColors[key_profile_verifiedCheck] = 0xFFB8860B;  // CipherGram: dark yellow
         defaultColors[key_profile_title] = 0xffffffff;
-        defaultColors[key_profile_status] = 0xffd7eafa;
+        defaultColors[key_profile_status] = 0xffFFF0C0;  // CipherGram: light yellow
 
         defaultColors[key_profile_tabText] = 0xff878c90;
-        defaultColors[key_profile_tabSelectedText] = 0xff3a95d5;
-        defaultColors[key_profile_tabSelectedLine] = 0xff4fa6e9;
+        defaultColors[key_profile_tabSelectedText] = 0xFFB8860B;  // CipherGram: dark yellow
+        defaultColors[key_profile_tabSelectedLine] = 0xFFB8860B;  // CipherGram: dark yellow
         defaultColors[key_profile_tabSelector] = 0x0f000000;
 
         defaultColors[key_player_actionBarSelector] = 0x0f000000;
@@ -563,16 +563,16 @@ public class ThemeColors {
         defaultColors[key_sheet_other] = 0xffc9cdd3;
 
         defaultColors[key_files_folderIcon] = 0xffffffff;
-        defaultColors[key_files_folderIconBackground] = 0xff5dafeb;
+        defaultColors[key_files_folderIconBackground] = 0xFFB8860B;  // CipherGram: dark yellow
         defaultColors[key_files_iconText] = 0xffffffff;
 
         defaultColors[key_sessions_devicesImage] = 0xff969696;
 
-        defaultColors[key_passport_authorizeBackground] = 0xff45abef;
-        defaultColors[key_passport_authorizeBackgroundSelected] = 0xff409ddb;
+        defaultColors[key_passport_authorizeBackground] = 0xFFB8860B;  // CipherGram: dark yellow
+        defaultColors[key_passport_authorizeBackgroundSelected] = 0xFF9A7209;  // CipherGram: darker yellow
         defaultColors[key_passport_authorizeText] = 0xffffffff;
 
-        defaultColors[key_location_sendLocationBackground] = 0xff469df6;
+        defaultColors[key_location_sendLocationBackground] = 0xFFB8860B;  // CipherGram: dark yellow
         defaultColors[key_location_sendLocationIcon] = 0xffffffff;
         defaultColors[key_location_sendLocationText] = 0xff1c8ad8;
         defaultColors[key_location_sendLiveLocationBackground] = 0xff4fc244;
@@ -590,10 +590,10 @@ public class ThemeColors {
         defaultColors[key_calls_callReceivedGreenIcon] = 0xff00c853;
         defaultColors[key_calls_callReceivedRedIcon] = 0xffff4848;
 
-        defaultColors[key_featuredStickers_addedIcon] = 0xff50a8eb;
+        defaultColors[key_featuredStickers_addedIcon] = 0xFFB8860B;  // CipherGram: dark yellow
         defaultColors[key_featuredStickers_buttonProgress] = 0xffffffff;
-        defaultColors[key_featuredStickers_addButton] = 0xff50a8eb;
-        defaultColors[key_featuredStickers_addButtonPressed] = 0xff439bde;
+        defaultColors[key_featuredStickers_addButton] = 0xFFB8860B;  // CipherGram: dark yellow
+        defaultColors[key_featuredStickers_addButtonPressed] = 0xFF9A7209;  // CipherGram: darker yellow
         defaultColors[key_featuredStickers_removeButtonText] = 0xff5093d3;
         defaultColors[key_featuredStickers_buttonText] = 0xffffffff;
         defaultColors[key_featuredStickers_unread] = 0xff4da6ea;
@@ -633,10 +633,10 @@ public class ThemeColors {
         defaultColors[key_contacts_inviteBackground] = 0xff55be61;
         defaultColors[key_contacts_inviteText] = 0xffffffff;
 
-        defaultColors[key_login_progressInner] = 0xffe1eaf2;
-        defaultColors[key_login_progressOuter] = 0xff62a0d0;
+        defaultColors[key_login_progressInner] = 0xffFFF0C0;  // CipherGram: light yellow
+        defaultColors[key_login_progressOuter] = 0xFFB8860B;  // CipherGram: dark yellow
 
-        defaultColors[key_picker_enabledButton] = 0xff19a7e8;
+        defaultColors[key_picker_enabledButton] = 0xFFB8860B;  // CipherGram: dark yellow
         defaultColors[key_picker_disabledButton] = 0xff999999;
         defaultColors[key_picker_badge] = 0xff29b6f7;
         defaultColors[key_picker_badgeText] = 0xffffffff;
@@ -679,7 +679,7 @@ public class ThemeColors {
         defaultColors[key_statisticChartLine_cyan] = 0xff40D0CA;
         defaultColors[key_statisticChartLineEmpty] = 0xFFEEEEEE;
 
-        defaultColors[key_color_blue] = 0xff327FE5;
+        defaultColors[key_color_blue] = 0xFFB8860B;  // CipherGram: dark yellow
         defaultColors[key_color_green] = 0xff61C752;
         defaultColors[key_color_red] = 0xffE05356;
         defaultColors[key_color_yellow] = 0xffEBA52D;

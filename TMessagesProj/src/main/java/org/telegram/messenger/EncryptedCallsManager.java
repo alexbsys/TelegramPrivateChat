@@ -272,6 +272,26 @@ public class EncryptedCallsManager {
         return enabled;
     }
     
+    /**
+     * Reload all encryption keys to native layer during active call
+     * Called when Protected Zone password is entered during an encrypted call
+     */
+    public void reloadKeysToNative() {
+        try {
+            // Clear previous keys
+            org.telegram.messenger.voip.NativeInstance.clearIncomingEncryptionKeys();
+            
+            // Re-add all enabled incoming keys
+            List<byte[]> keys = getEnabledIncomingDerivedKeys();
+            for (byte[] key : keys) {
+                org.telegram.messenger.voip.NativeInstance.addIncomingEncryptionKey(key);
+            }
+            FileLog.d("EncryptedCallsManager: Reloaded " + keys.size() + " incoming decryption keys to native");
+        } catch (Exception e) {
+            FileLog.e("EncryptedCallsManager: Error reloading keys to native", e);
+        }
+    }
+    
     // ============= Call Status =============
     
     public void resetCallStatus() {

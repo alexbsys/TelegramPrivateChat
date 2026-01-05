@@ -6,6 +6,7 @@
 #include <mutex>
 #include <functional>
 #include <vector>
+#include <atomic>
 
 namespace tgcalls {
 
@@ -64,6 +65,16 @@ public:
     int getIncomingEncryptionType() const;
     void setIncomingEncryptionType(int type);
     
+    // Traffic stats tracking
+    void addBytesSent(size_t bytes, bool isAudio);
+    void addBytesReceived(size_t bytes, bool isAudio);
+    void getTrafficStats(uint64_t& sent, uint64_t& received, uint64_t& audioSent, uint64_t& audioReceived) const;
+    void resetTrafficStats();
+    
+    // Video codec detection
+    void setIncomingVideoCodec(int codecType);  // 0=Unknown, 1=H.264, 2=H.265, 3=VP8, 4=VP9
+    int getIncomingVideoCodec() const;
+    
 private:
     CustomEncryptionManager() = default;
     ~CustomEncryptionManager() = default;
@@ -82,6 +93,15 @@ private:
     // Encryption types
     int _outgoingEncryptionType = 0; // 0 = AES-256, 1 = GOST 28147, 2 = AES LITE, 3 = GOST LITE
     int _incomingEncryptionType = -1; // -1 = not yet determined, 0-3 = detected from incoming frames
+    
+    // Traffic stats
+    std::atomic<uint64_t> _bytesSent{0};
+    std::atomic<uint64_t> _bytesReceived{0};
+    std::atomic<uint64_t> _audioBytesSent{0};
+    std::atomic<uint64_t> _audioBytesReceived{0};
+    
+    // Video codec
+    std::atomic<int> _incomingVideoCodec{0}; // 0=Unknown, 1=H.264, 2=H.265, 3=VP8, 4=VP9
 };
 
 } // namespace tgcalls

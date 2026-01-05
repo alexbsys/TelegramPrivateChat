@@ -77,6 +77,12 @@ public class HiddenChatsManager {
     private static final String PREF_FORGET_PASSWORD_ON_MINIMIZE = "forget_password_on_minimize";
     private static final String PREF_ASK_PASSWORD_ON_START_MODE = "ask_password_on_start_mode";
     private static final String PREF_HAS_ENCRYPTED_CHATS = "has_encrypted_chats";
+    private static final String PREF_FIRST_START_DONE = "first_start_done";
+    private static final String PREF_USER_DECLINED_PASSWORD = "user_declined_password";
+    private static final String PREF_PASSWORD_OFFER_SHOWN = "password_offer_shown";
+    
+    // Default password for users who don't want to set their own
+    public static final String DEFAULT_PASSWORD = "0000";
     
     // Ask password modes
     public static final int ASK_PASSWORD_DISABLED = 0;
@@ -982,11 +988,12 @@ public class HiddenChatsManager {
     /**
      * Get ask password on start mode
      * @return ASK_PASSWORD_DISABLED, ASK_PASSWORD_ALWAYS, or ASK_PASSWORD_IF_ENCRYPTED_CHATS
+     * Default: ASK_PASSWORD_IF_ENCRYPTED_CHATS
      */
     public int getAskPasswordOnStartMode() {
         return ApplicationLoader.applicationContext
             .getSharedPreferences("hiddenChatsPrefs", android.content.Context.MODE_PRIVATE)
-            .getInt(PREF_ASK_PASSWORD_ON_START_MODE, ASK_PASSWORD_DISABLED);
+            .getInt(PREF_ASK_PASSWORD_ON_START_MODE, ASK_PASSWORD_IF_ENCRYPTED_CHATS);
     }
     
     /**
@@ -1033,6 +1040,135 @@ public class HiddenChatsManager {
             return hasEncryptedChats();
         }
         return false;
+    }
+    
+    /**
+     * Check if this is the first app start (password not yet initialized)
+     */
+    public boolean isFirstStart() {
+        return !ApplicationLoader.applicationContext
+            .getSharedPreferences("hiddenChatsPrefs", android.content.Context.MODE_PRIVATE)
+            .getBoolean(PREF_FIRST_START_DONE, false);
+    }
+    
+    /**
+     * Mark first start as done
+     */
+    public void setFirstStartDone() {
+        ApplicationLoader.applicationContext
+            .getSharedPreferences("hiddenChatsPrefs", android.content.Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean(PREF_FIRST_START_DONE, true)
+            .apply();
+    }
+    
+    /**
+     * Check if user declined to set a custom password
+     */
+    public boolean hasUserDeclinedPassword() {
+        return ApplicationLoader.applicationContext
+            .getSharedPreferences("hiddenChatsPrefs", android.content.Context.MODE_PRIVATE)
+            .getBoolean(PREF_USER_DECLINED_PASSWORD, false);
+    }
+    
+    /**
+     * Set flag that user declined to set a custom password
+     */
+    public void setUserDeclinedPassword(boolean declined) {
+        ApplicationLoader.applicationContext
+            .getSharedPreferences("hiddenChatsPrefs", android.content.Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean(PREF_USER_DECLINED_PASSWORD, declined)
+            .apply();
+    }
+    
+    /**
+     * Initialize on first start - set default password "0000"
+     */
+    public void initializeFirstStart() {
+        if (isFirstStart()) {
+            FileLog.d("HiddenChatsManager: First start - initializing with default password");
+            setPassword(DEFAULT_PASSWORD);
+            // Set default ask password mode to "If there are encrypted chats"
+            setAskPasswordOnStartMode(ASK_PASSWORD_IF_ENCRYPTED_CHATS);
+            setFirstStartDone();
+        }
+    }
+    
+    /**
+     * Try to auto-login with default password "0000"
+     * @return true if default password worked
+     */
+    public boolean tryAutoLoginWithDefaultPassword() {
+        if (mainCachedPassword != null) {
+            return false; // Already logged in
+        }
+        
+        if (tryLoadMainConfig(DEFAULT_PASSWORD)) {
+            FileLog.d("HiddenChatsManager: Auto-login with default password successful");
+            return true;
+        }
+        return false;
+    }
+    
+    /**
+     * Check if current password is the default "0000"
+     */
+    public boolean isUsingDefaultPassword() {
+        if (mainPasswordHash == null) {
+            return false;
+        }
+        return mainPasswordHash.equals(hashPassword(DEFAULT_PASSWORD));
+    }
+    
+    /**
+     * Check if user should be prompted to set a custom password
+     * Returns true if password is "0000" and user hasn't declined before
+     * @deprecated Use shouldOfferCustomPassword() instead
+     */
+    public boolean shouldPromptForCustomPassword() {
+        return shouldOfferCustomPassword();
+    }
+    
+    /**
+     * Check if we should offer user to set custom password
+     * Returns true if:
+     * - Currently using default password "0000"
+     * - Haven't shown the offer dialog yet
+     * - User hasn't declined the offer
+     */
+    public boolean shouldOfferCustomPassword() {
+        return isUsingDefaultPassword() && !isPasswordOfferShown() && !hasUserDeclinedPassword();
+    }
+    
+    /**
+     * Check if password offer dialog was already shown
+     */
+    public boolean isPasswordOfferShown() {
+        return ApplicationLoader.applicationContext
+            .getSharedPreferences("hiddenChatsPrefs", android.content.Context.MODE_PRIVATE)
+            .getBoolean(PREF_PASSWORD_OFFER_SHOWN, false);
+    }
+    
+    /**
+     * Set flag that password offer was shown
+     */
+    public void setPasswordOfferShown(boolean shown) {
+        ApplicationLoader.applicationContext
+            .getSharedPreferences("hiddenChatsPrefs", android.content.Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean(PREF_PASSWORD_OFFER_SHOWN, shown)
+            .apply();
+    }
+    
+    /**
+     * Remove password - set it back to default "0000"
+     */
+    public void removePassword() {
+        changePassword(DEFAULT_PASSWORD);
+        // Reset the offer shown flag so user can be offered again if they want
+        setPasswordOfferShown(false);
+        setUserDeclinedPassword(false);
     }
     
     /**

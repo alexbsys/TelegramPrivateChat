@@ -22,6 +22,7 @@ import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
 import org.telegram.messenger.AndroidUtilities;
+import org.telegram.messenger.CallSettingsManager;
 import org.telegram.messenger.DialogObject;
 import org.telegram.messenger.EncryptedMessagesManager;
 import org.telegram.messenger.HiddenChatsManager;
@@ -67,6 +68,14 @@ public class HiddenChatsActivity extends BaseFragment {
     private int incomingKeysEndRow;
     private int addIncomingKeyRow;
     private int encryptedCallsInfoRow;
+    
+    // Call control section
+    private int callControlHeaderRow;
+    private int blacklistRow;
+    private int whitelistEnabledRow;
+    private int whitelistRow;
+    private int autoAnswerRow;
+    private int callControlInfoRow;
     
     private int hiddenChatsHeaderRow;
     private int hiddenChatsStartRow;
@@ -116,6 +125,14 @@ public class HiddenChatsActivity extends BaseFragment {
         }
         addIncomingKeyRow = rowCount++;
         encryptedCallsInfoRow = rowCount++;
+        
+        // Call control section
+        callControlHeaderRow = rowCount++;
+        blacklistRow = rowCount++;
+        whitelistEnabledRow = rowCount++;
+        whitelistRow = rowCount++;
+        autoAnswerRow = rowCount++;
+        callControlInfoRow = rowCount++;
         
         if (!hiddenChatsList.isEmpty()) {
             hiddenChatsHeaderRow = rowCount++;
@@ -180,6 +197,19 @@ public class HiddenChatsActivity extends BaseFragment {
             } else if (position >= incomingKeysStartRow && position < incomingKeysEndRow) {
                 int index = position - incomingKeysStartRow;
                 showIncomingKeyOptionsDialog(index);
+            } else if (position == blacklistRow) {
+                presentFragment(new CallListActivity(CallListActivity.TYPE_BLACKLIST));
+            } else if (position == whitelistEnabledRow) {
+                CallSettingsManager manager = CallSettingsManager.getInstance();
+                boolean newValue = !manager.isWhitelistEnabled();
+                manager.setWhitelistEnabled(newValue);
+                if (view instanceof org.telegram.ui.Cells.TextCheckCell) {
+                    ((org.telegram.ui.Cells.TextCheckCell) view).setChecked(newValue);
+                }
+            } else if (position == whitelistRow) {
+                presentFragment(new CallListActivity(CallListActivity.TYPE_WHITELIST));
+            } else if (position == autoAnswerRow) {
+                presentFragment(new CallListActivity(CallListActivity.TYPE_AUTO_ANSWER));
             } else if (position >= hiddenChatsStartRow && position < hiddenChatsEndRow) {
                 // Click on hidden chat - show option to unhide
                 int index = position - hiddenChatsStartRow;
@@ -204,6 +234,16 @@ public class HiddenChatsActivity extends BaseFragment {
         });
 
         return fragmentView;
+    }
+    
+    @Override
+    public void onResume() {
+        super.onResume();
+        // Refresh adapter when returning from CallListActivity or other fragments
+        // This ensures blacklist/whitelist/auto-answer counts are updated
+        if (listAdapter != null) {
+            listAdapter.notifyDataSetChanged();
+        }
     }
 
     private void showHideChatDialog() {
@@ -325,6 +365,7 @@ public class HiddenChatsActivity extends BaseFragment {
         if (context == null) return;
 
         HiddenChatsManager manager = HiddenChatsManager.getInstance();
+        boolean isUsingDefault = manager.isUsingDefaultPassword();
         
         AlertDialog.Builder builder = new AlertDialog.Builder(context);
         builder.setTitle(LocaleController.getString("ChangePassword", R.string.ChangePassword));
@@ -342,7 +383,10 @@ public class HiddenChatsActivity extends BaseFragment {
         oldPasswordField.setLines(1);
         oldPasswordField.setSingleLine(true);
         oldPasswordField.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
-        oldPasswordField.setHint(LocaleController.getString("CurrentPassword", R.string.CurrentPassword));
+        // If using default password, hint that it's optional
+        oldPasswordField.setHint(isUsingDefault ? 
+            LocaleController.getString("CurrentPasswordOptional", R.string.CurrentPasswordOptional) :
+            LocaleController.getString("CurrentPassword", R.string.CurrentPassword));
         layout.addView(oldPasswordField, LayoutHelper.createLinear(LayoutHelper.MATCH_PARENT, 48));
 
         final EditTextBoldCursor newPasswordField = new EditTextBoldCursor(context);
@@ -376,12 +420,17 @@ public class HiddenChatsActivity extends BaseFragment {
             String newPass = newPasswordField.getText().toString();
             String confirmPass = confirmPasswordField.getText().toString();
 
-            // In decoy mode, check decoy password; in normal mode, check main password
+            // Check current password
             boolean passwordCorrect;
             if (manager.isDecoyMode()) {
                 passwordCorrect = manager.checkDecoyPassword(oldPass);
             } else {
                 passwordCorrect = manager.checkMainPassword(oldPass);
+            }
+            
+            // If current password is empty and default "0000" works, accept it
+            if (!passwordCorrect && TextUtils.isEmpty(oldPass) && manager.isUsingDefaultPassword()) {
+                passwordCorrect = true;
             }
             
             if (!passwordCorrect) {
@@ -438,6 +487,19 @@ public class HiddenChatsActivity extends BaseFragment {
             successBuilder.setPositiveButton(LocaleController.getString("OK", R.string.OK), null);
             showDialog(successBuilder.create());
         });
+        
+        // Add "Remove Password" button - sets password to default "0000"
+        if (!manager.isUsingDefaultPassword()) {
+            builder.setNeutralButton(LocaleController.getString("RemovePassword", R.string.RemovePassword), (dialog, which) -> {
+                manager.removePassword();
+                
+                AlertDialog.Builder successBuilder = new AlertDialog.Builder(context);
+                successBuilder.setTitle(LocaleController.getString("Success", R.string.Success));
+                successBuilder.setMessage(LocaleController.getString("PasswordRemovedMessage", R.string.PasswordRemovedMessage));
+                successBuilder.setPositiveButton(LocaleController.getString("OK", R.string.OK), null);
+                showDialog(successBuilder.create());
+            });
+        }
 
         builder.setNegativeButton(LocaleController.getString("Cancel", R.string.Cancel), null);
         showDialog(builder.create());
@@ -940,6 +1002,13 @@ public class HiddenChatsActivity extends BaseFragment {
                     view.setBackgroundColor(Theme.getColor(Theme.key_windowBackgroundWhite));
                     break;
                 case 3:
+                    view = new TextCell(mContext);
+                    view.setBackgroundColor(Theme.getColor(Theme.key_windowBackgroundWhite));
+                    break;
+                case 4:
+                    view = new org.telegram.ui.Cells.TextCheckCell(mContext);
+                    view.setBackgroundColor(Theme.getColor(Theme.key_windowBackgroundWhite));
+                    break;
                 default:
                     view = new TextCell(mContext);
                     view.setBackgroundColor(Theme.getColor(Theme.key_windowBackgroundWhite));
@@ -1012,8 +1081,25 @@ public class HiddenChatsActivity extends BaseFragment {
                         String emoji = org.telegram.messenger.EncryptedCallsManager.getEncryptionEmoji(callsManager.getDefaultEncryptionType());
                         textCell.setTextAndValue(LocaleController.getString("EncryptionType", R.string.EncryptionType), emoji + " " + typeName, true);
                     } else if (position == addIncomingKeyRow) {
-                        textCell.setTextAndIcon(LocaleController.getString("AddIncomingKey", R.string.AddIncomingKey), R.drawable.msg_add, false);
+                        textCell.setTextAndIcon(LocaleController.getString("AddIncomingKey", R.string.AddIncomingKey), R.drawable.msg_add, true);
                         textCell.setColors(Theme.key_windowBackgroundWhiteBlueText4, Theme.key_windowBackgroundWhiteBlueText4);
+                    } else if (position == blacklistRow) {
+                        int count = CallSettingsManager.getInstance().getBlacklist().size();
+                        textCell.setTextAndValue(LocaleController.getString("Blacklist", R.string.Blacklist), String.valueOf(count), true);
+                    } else if (position == whitelistRow) {
+                        int count = CallSettingsManager.getInstance().getWhitelist().size();
+                        textCell.setTextAndValue(LocaleController.getString("Whitelist", R.string.Whitelist), String.valueOf(count), true);
+                    } else if (position == autoAnswerRow) {
+                        int count = CallSettingsManager.getInstance().getAutoAnswerList().size();
+                        textCell.setTextAndValue(LocaleController.getString("AutoAnswer", R.string.AutoAnswer), String.valueOf(count), false);
+                    }
+                    break;
+                }
+                case 4: {
+                    org.telegram.ui.Cells.TextCheckCell checkCell = (org.telegram.ui.Cells.TextCheckCell) holder.itemView;
+                    if (position == whitelistEnabledRow) {
+                        checkCell.setTextAndCheck(LocaleController.getString("WhitelistEnabled", R.string.WhitelistEnabled), 
+                            CallSettingsManager.getInstance().isWhitelistEnabled(), true);
                     }
                     break;
                 }
@@ -1024,6 +1110,9 @@ public class HiddenChatsActivity extends BaseFragment {
                         cell.setBackground(Theme.getThemedDrawableByKey(mContext, R.drawable.greydivider, Theme.key_windowBackgroundGrayShadow));
                     } else if (position == encryptedCallsInfoRow) {
                         cell.setText(LocaleController.getString("EncryptedCallsInfo", R.string.EncryptedCallsInfo));
+                        cell.setBackground(Theme.getThemedDrawableByKey(mContext, R.drawable.greydivider, Theme.key_windowBackgroundGrayShadow));
+                    } else if (position == callControlInfoRow) {
+                        cell.setText(LocaleController.getString("CallControlInfo", R.string.CallControlInfo));
                         cell.setBackground(Theme.getThemedDrawableByKey(mContext, R.drawable.greydivider, Theme.key_windowBackgroundGrayShadow));
                     } else if (position == hiddenChatsInfoRow) {
                         if (hiddenChatsList.isEmpty()) {
@@ -1041,6 +1130,8 @@ public class HiddenChatsActivity extends BaseFragment {
                         cell.setText(LocaleController.getString("EncryptedCalls", R.string.EncryptedCalls));
                     } else if (position == incomingCallsHeaderRow) {
                         cell.setText(LocaleController.getString("IncomingCallKeys", R.string.IncomingCallKeys));
+                    } else if (position == callControlHeaderRow) {
+                        cell.setText(LocaleController.getString("CallControl", R.string.CallControl));
                     } else if (position == hiddenChatsHeaderRow) {
                         cell.setText(LocaleController.formatString("HiddenChatsCount", R.string.HiddenChatsCount, hiddenChatsList.size()));
                     }
@@ -1101,15 +1192,20 @@ public class HiddenChatsActivity extends BaseFragment {
                     || position == decoyPasswordRow || position == forgetPasswordRow 
                     || position == askPasswordOnStartRow || position == duplicateDetectionRow
                     || position == encryptedSearchRow
-                    || position == outgoingCallPasswordRow || position == addIncomingKeyRow) {
+                    || position == outgoingCallPasswordRow || position == addIncomingKeyRow
+                    || position == blacklistRow || position == whitelistRow || position == autoAnswerRow) {
                 return 0;
-            } else if (position == sectionRow || position == hiddenChatsInfoRow || position == encryptedCallsInfoRow) {
+            } else if (position == sectionRow || position == hiddenChatsInfoRow || position == encryptedCallsInfoRow 
+                    || position == callControlInfoRow) {
                 return 1;
-            } else if (position == hiddenChatsHeaderRow || position == encryptedCallsHeaderRow || position == incomingCallsHeaderRow) {
+            } else if (position == hiddenChatsHeaderRow || position == encryptedCallsHeaderRow 
+                    || position == incomingCallsHeaderRow || position == callControlHeaderRow) {
                 return 2;
             } else if ((position >= incomingKeysStartRow && position < incomingKeysEndRow) 
                     || (position >= hiddenChatsStartRow && position < hiddenChatsEndRow)) {
                 return 3;
+            } else if (position == whitelistEnabledRow) {
+                return 4;
             }
             return 0;
         }

@@ -93,6 +93,10 @@ int CustomFrameEncryptorImpl::Encrypt(
     
     if (result.success) {
         *bytes_written = result.bytesWritten;
+        // Track bytes sent
+        CustomEncryptionManager::getInstance().addBytesSent(
+            result.bytesWritten, 
+            media_type == cricket::MediaType::MEDIA_TYPE_AUDIO);
         return 0;
     }
     
@@ -232,6 +236,85 @@ static uint8_t FindSeiMagicByte(const uint8_t* data, size_t size) {
     return 0;  // Not found
 }
 
+// Helper to detect video codec from NAL units
+// Sets: 0=Unknown, 1=H.264, 2=H.265, 3=VP8, 4=VP9
+static void DetectAndSetVideoCodec(const uint8_t* data, size_t size) {
+    if (size < 5) return;
+    
+    // Look for NAL unit start code
+    for (size_t i = 0; i + 4 < size; i++) {
+        bool found3 = (data[i] == 0x00 && data[i+1] == 0x00 && data[i+2] == 0x01);
+        bool found4 = (i + 4 < size && data[i] == 0x00 && data[i+1] == 0x00 && 
+                       data[i+2] == 0x00 && data[i+3] == 0x01);
+        
+        if (found4 || found3) {
+            size_t nalPos = found4 ? i + 4 : i + 3;
+            if (nalPos >= size) return;
+            
+            uint8_t nalByte = data[nalPos];
+            uint8_t forbiddenBit = (nalByte >> 7) & 0x01;
+            
+            if (forbiddenBit == 0) {
+                // Check if it looks like H.264 or H.265
+                // H.264: forbidden_zero_bit(1) + nal_ref_idc(2) + nal_unit_type(5)
+                // H.265: forbidden_zero_bit(1) + nal_unit_type(6) + nuh_layer_id(6) + nuh_temporal_id_plus1(3)
+                
+                uint8_t h264Type = nalByte & 0x1F;
+                
+                // Check second byte for H.265 marker
+                if (nalPos + 1 < size) {
+                    uint8_t secondByte = data[nalPos + 1];
+                    // H.265 has specific patterns in the second byte (layer_id and temporal_id)
+                    // nuh_layer_id is 6 bits, typically 0 for base layer
+                    // nuh_temporal_id_plus1 is 3 bits, must be > 0
+                    uint8_t layerId = secondByte >> 3;
+                    uint8_t tempIdPlus1 = secondByte & 0x07;
+                    
+                    if (layerId == 0 && tempIdPlus1 >= 1 && tempIdPlus1 <= 7) {
+                        // Likely H.265
+                        uint8_t h265Type = (nalByte >> 1) & 0x3F;
+                        // VPS=32, SPS=33, PPS=34, IDR=19/20, TRAIL=1
+                        if (h265Type == 32 || h265Type == 33 || h265Type == 34 ||
+                            h265Type == 19 || h265Type == 20 || h265Type == 1) {
+                            CustomEncryptionManager::getInstance().setIncomingVideoCodec(2); // H.265
+                            return;
+                        }
+                    }
+                }
+                
+                // Check for H.264 NAL types
+                // SPS=7, PPS=8, IDR=5, non-IDR=1
+                if (h264Type == 7 || h264Type == 8 || h264Type == 5 || h264Type == 1) {
+                    CustomEncryptionManager::getInstance().setIncomingVideoCodec(1); // H.264
+                    return;
+                }
+            }
+            return;
+        }
+    }
+    
+    // VP8 check: starts with specific bytes
+    if (size >= 3 && (data[0] & 0x01) == 0) {
+        // VP8 keyframe starts with 0x9d 0x01 0x2a (after the 3-byte frame tag)
+        if (size >= 10) {
+            if (data[3] == 0x9d && data[4] == 0x01 && data[5] == 0x2a) {
+                CustomEncryptionManager::getInstance().setIncomingVideoCodec(3); // VP8
+                return;
+            }
+        }
+    }
+    
+    // VP9 check
+    if (size >= 2) {
+        // VP9 frames start with specific profile/show bits
+        uint8_t profile = (data[0] >> 4) & 0x03;
+        if (profile <= 3) {
+            // Could be VP9, but need more validation
+            // For now, leave as unknown if not H.264/H.265
+        }
+    }
+}
+
 webrtc::FrameDecryptorInterface::Result CustomFrameDecryptorImpl::Decrypt(
     cricket::MediaType media_type,
     const std::vector<uint32_t>& csrcs,
@@ -271,6 +354,12 @@ webrtc::FrameDecryptorInterface::Result CustomFrameDecryptorImpl::Decrypt(
         if (frame.size() >= encrypted_frame.size()) {
             memcpy(frame.data(), encrypted_frame.data(), encrypted_frame.size());
             CustomEncryptionManager::getInstance().reportStatus(true, EncryptionStatusManager::Disabled);
+            // Track bytes received (unencrypted)
+            CustomEncryptionManager::getInstance().addBytesReceived(encrypted_frame.size(), !isVideo);
+            // Detect video codec for unencrypted streams
+            if (isVideo && encrypted_frame.size() > 4) {
+                DetectAndSetVideoCodec(encrypted_frame.data(), encrypted_frame.size());
+            }
             return Result(Status::kOk, encrypted_frame.size());
         }
         return Result(Status::kFailedToDecrypt, 0);
@@ -365,6 +454,12 @@ webrtc::FrameDecryptorInterface::Result CustomFrameDecryptorImpl::Decrypt(
         
         CustomEncryptionManager::getInstance().reportStatus(true, EncryptionStatusManager::DecryptionSuccess);
         CustomEncryptionManager::getInstance().setIncomingEncryptionType(decryptor->GetEncryptionTypeId());
+        // Track bytes received
+        CustomEncryptionManager::getInstance().addBytesReceived(encrypted_frame.size(), !isVideo);
+        // Detect video codec from decrypted stream
+        if (isVideo && result.bytesWritten > 4) {
+            DetectAndSetVideoCodec(frame.data(), result.bytesWritten);
+        }
         return Result(Status::kOk, result.bytesWritten);
     }
     

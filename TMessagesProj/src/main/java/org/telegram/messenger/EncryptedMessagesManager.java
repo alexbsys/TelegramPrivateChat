@@ -115,6 +115,14 @@ public class EncryptedMessagesManager {
     }
     
     /**
+     * Get cached Protected Zone password for encrypted message operations
+     * @return cached password or null if not cached
+     */
+    public String getCachedPassword() {
+        return cachedProtectedZonePassword;
+    }
+    
+    /**
      * Check if currently in decoy mode
      */
     public boolean isInDecoyMode() {
@@ -655,13 +663,21 @@ public class EncryptedMessagesManager {
                 MessagesStorage storage = MessagesStorage.getInstance(UserConfig.selectedAccount);
                 ArrayList<MessageObject> messages = new ArrayList<>();
                 
-                // Query last N messages from this dialog
-                // This is a simplified approach - in production you'd want pagination
+                // Query last N messages from this dialog (limit < 0 means unlimited)
+                final int sqlLimit = limit;
                 storage.getStorageQueue().postRunnable(() -> {
                     try {
-                        org.telegram.SQLite.SQLiteCursor cursor = storage.getDatabase().queryFinalized(
-                            "SELECT data, mid FROM messages_v2 WHERE uid = ? ORDER BY mid DESC LIMIT ?",
-                            dialogId, limit > 0 ? limit : 10000);
+                        org.telegram.SQLite.SQLiteCursor cursor;
+                        if (sqlLimit < 0) {
+                            // Unlimited - no LIMIT clause
+                            cursor = storage.getDatabase().queryFinalized(
+                                "SELECT data, mid FROM messages_v2 WHERE uid = ? ORDER BY mid DESC",
+                                dialogId);
+                        } else {
+                            cursor = storage.getDatabase().queryFinalized(
+                                "SELECT data, mid FROM messages_v2 WHERE uid = ? ORDER BY mid DESC LIMIT ?",
+                                dialogId, sqlLimit);
+                        }
                         
                         ArrayList<Integer> matchingIds = new ArrayList<>();
                         
@@ -692,6 +708,136 @@ public class EncryptedMessagesManager {
             } catch (Exception e) {
                 FileLog.e(e);
                 callback.accept(new ArrayList<>());
+            }
+        });
+    }
+    
+    // Active search task for cancellation
+    private volatile boolean searchCancelled = false;
+    private volatile long currentSearchDialogId = 0;
+    
+    /**
+     * Cancel ongoing encrypted message search
+     */
+    public void cancelEncryptedSearch() {
+        searchCancelled = true;
+    }
+    
+    /**
+     * Check if chat has encrypted messages (optimization to skip search)
+     */
+    public boolean chatHasEncryptedMessages(long dialogId) {
+        return chatPasswords.containsKey(dialogId);
+    }
+    
+    /**
+     * Search encrypted messages and return MessageObjects incrementally
+     * @param dialogId dialog to search
+     * @param query search query (will be matched against decrypted text)
+     * @param protectedZonePassword Protected Zone password (used to load chat passwords if needed)
+     * @param currentAccount account id
+     * @param callback called with list of matching MessageObjects (called multiple times for incremental results)
+     */
+    public void searchEncryptedMessagesWithObjects(long dialogId, String query, String protectedZonePassword, 
+            int currentAccount, java.util.function.Consumer<ArrayList<MessageObject>> callback) {
+        int limit = getEncryptedSearchLimit();
+        if (limit == 0 || query == null || query.isEmpty()) {
+            callback.accept(new ArrayList<>());
+            return;
+        }
+        
+        // Check if this chat has encrypted messages at all
+        if (!chatHasEncryptedMessages(dialogId)) {
+            FileLog.d("EncryptedMessagesManager: Chat " + dialogId + " has no encrypted messages, skipping search");
+            callback.accept(new ArrayList<>());
+            return;
+        }
+        
+        // Get the CHAT-SPECIFIC password for decryption (not Protected Zone password!)
+        String chatPassword = getChatPassword(dialogId);
+        if (chatPassword == null || chatPassword.isEmpty()) {
+            FileLog.d("EncryptedMessagesManager: No password for chat " + dialogId);
+            callback.accept(new ArrayList<>());
+            return;
+        }
+        
+        // Reset cancellation flag and set current search dialog
+        searchCancelled = false;
+        currentSearchDialogId = dialogId;
+        
+        String queryLower = query.toLowerCase();
+        
+        // Get messages from MessagesStorage
+        MessagesStorage storage = MessagesStorage.getInstance(currentAccount);
+        
+        // Query last N messages from this dialog (limit < 0 means unlimited)
+        final int sqlLimit = limit;
+        final String finalChatPassword = chatPassword;
+        
+        storage.getStorageQueue().postRunnable(() -> {
+            ArrayList<MessageObject> matchingMessages = new ArrayList<>();
+            int processedCount = 0;
+            int batchSize = 10; // Send results every N matches for responsiveness
+            
+            try {
+                org.telegram.SQLite.SQLiteCursor cursor;
+                if (sqlLimit < 0) {
+                    // Unlimited - no LIMIT clause
+                    cursor = storage.getDatabase().queryFinalized(
+                        "SELECT data, mid FROM messages_v2 WHERE uid = ? ORDER BY mid DESC",
+                        dialogId);
+                } else {
+                    cursor = storage.getDatabase().queryFinalized(
+                        "SELECT data, mid FROM messages_v2 WHERE uid = ? ORDER BY mid DESC LIMIT ?",
+                        dialogId, sqlLimit);
+                }
+                
+                while (cursor.next()) {
+                    // Check for cancellation
+                    if (searchCancelled || currentSearchDialogId != dialogId) {
+                        FileLog.d("EncryptedMessagesManager: Search cancelled for dialog " + dialogId);
+                        cursor.dispose();
+                        return;
+                    }
+                    
+                    org.telegram.tgnet.NativeByteBuffer data = cursor.byteBufferValue(0);
+                    int messageId = cursor.intValue(1);
+                    
+                    if (data != null) {
+                        TLRPC.Message message = TLRPC.Message.TLdeserialize(data, data.readInt32(false), false);
+                        data.reuse();
+                        
+                        if (message != null && message.message != null && isEncryptedMessage(message.message)) {
+                            // Use CHAT password, not Protected Zone password!
+                            String decrypted = decryptMessage(message.message, finalChatPassword);
+                            if (decrypted != null && decrypted.toLowerCase().contains(queryLower)) {
+                                MessageObject mo = new MessageObject(currentAccount, message, false, true);
+                                matchingMessages.add(mo);
+                                
+                                // Send incremental results every batchSize matches
+                                if (matchingMessages.size() % batchSize == 0) {
+                                    ArrayList<MessageObject> batch = new ArrayList<>(matchingMessages);
+                                    AndroidUtilities.runOnUIThread(() -> callback.accept(batch));
+                                }
+                            }
+                        }
+                    }
+                    processedCount++;
+                }
+                cursor.dispose();
+                
+                // Send final results
+                if (!searchCancelled && currentSearchDialogId == dialogId) {
+                    ArrayList<MessageObject> finalResults = new ArrayList<>(matchingMessages);
+                    AndroidUtilities.runOnUIThread(() -> callback.accept(finalResults));
+                }
+                
+                FileLog.d("EncryptedMessagesManager: Search completed, processed " + processedCount + 
+                    " messages, found " + matchingMessages.size() + " matches");
+                
+            } catch (Exception e) {
+                FileLog.e(e);
+                AndroidUtilities.runOnUIThread(() -> callback.accept(new ArrayList<>()));
             }
         });
     }

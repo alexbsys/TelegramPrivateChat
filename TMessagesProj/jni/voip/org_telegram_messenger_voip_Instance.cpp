@@ -1388,3 +1388,32 @@ JNIEXPORT void JNICALL
 Java_org_telegram_messenger_voip_NativeInstance_setOutgoingEncryptionType(JNIEnv *env, jclass clazz, jint type) {
     tgcalls::CustomEncryptionManager::getInstance().setOutgoingEncryptionType(type);
 }
+
+// Get traffic stats: [bytesSent, bytesReceived, audioBytesSent, audioBytesReceived]
+extern "C"
+JNIEXPORT jlongArray JNICALL
+Java_org_telegram_messenger_voip_NativeInstance_getCustomTrafficStats(JNIEnv *env, jclass clazz) {
+    uint64_t sent, received, audioSent, audioReceived;
+    tgcalls::CustomEncryptionManager::getInstance().getTrafficStats(sent, received, audioSent, audioReceived);
+    
+    jlongArray result = env->NewLongArray(4);
+    if (result == nullptr) {
+        return nullptr;
+    }
+    
+    jlong stats[4] = {
+        static_cast<jlong>(sent),
+        static_cast<jlong>(received),
+        static_cast<jlong>(audioSent),
+        static_cast<jlong>(audioReceived)
+    };
+    env->SetLongArrayRegion(result, 0, 4, stats);
+    return result;
+}
+
+// Get incoming video codec type: 0=Unknown, 1=H.264, 2=H.265, 3=VP8, 4=VP9
+extern "C"
+JNIEXPORT jint JNICALL
+Java_org_telegram_messenger_voip_NativeInstance_getIncomingVideoCodecType(JNIEnv *env, jclass clazz) {
+    return static_cast<jint>(tgcalls::CustomEncryptionManager::getInstance().getIncomingVideoCodec());
+}

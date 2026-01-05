@@ -2803,7 +2803,7 @@ CryptResult BlockXorCryptor::EncryptVideo(
     }
     
     // SEI-based: insert SEI NAL before each encrypted NAL
-    // XOR encrypt NAL payload IN-PLACE (no size change)
+    // XOR encrypt NAL payload, then escape to prevent false start codes
     
     size_t outPos = 0;
     for (size_t i = 0; i < nalUnits.size(); i++) {
@@ -2812,26 +2812,35 @@ CryptResult BlockXorCryptor::EncryptVideo(
         size_t nalTotalSize = nalEnd - nal.start_offset;
         size_t nalContentSize = nalTotalSize - nal.header_size;
         
-        if (nal.should_encrypt) {
+        if (nal.should_encrypt && nalContentSize > 0) {
             const uint8_t* payload = plaintext + nal.start_offset + nal.header_size;
             
             // Compute checksum of ORIGINAL payload
             uint32_t checksum = ComputeChecksum(payload, nalContentSize);
             
-            // Write SEI NAL
+            // XOR encrypt to temp buffer
+            std::vector<uint8_t> xorPayload(nalContentSize);
+            XorData(payload, xorPayload.data(), nalContentSize);
+            
+            // Calculate escaped size
+            size_t escapedSize = CalculateEscapedSize(xorPayload.data(), nalContentSize);
+            
+            // Write SEI NAL (include original payload size for decoding)
             size_t seiSize = WriteSeiNal(ciphertext + outPos, ciphertextMaxSize - outPos,
                                           _seqNum++, checksum, isH265);
             if (seiSize == 0) return CryptResult::Failed();
             outPos += seiSize;
             
             // Copy NAL header
-            if (outPos + nalTotalSize > ciphertextMaxSize) return CryptResult::Failed();
+            if (outPos + nal.header_size + escapedSize > ciphertextMaxSize) return CryptResult::Failed();
             memcpy(ciphertext + outPos, plaintext + nal.start_offset, nal.header_size);
             outPos += nal.header_size;
             
-            // XOR encrypt payload in-place (same size!)
-            XorData(payload, ciphertext + outPos, nalContentSize);
-            outPos += nalContentSize;
+            // Write escaped XOR'd payload
+            size_t written = WriteWithEmulationPrevention(xorPayload.data(), nalContentSize, 
+                                                           ciphertext + outPos, ciphertextMaxSize - outPos);
+            if (written == 0) return CryptResult::Failed();
+            outPos += written;
         } else {
             // Copy non-encrypted NAL as-is
             if (outPos + nalTotalSize > ciphertextMaxSize) return CryptResult::Failed();
@@ -2848,8 +2857,8 @@ size_t BlockXorCryptor::GetMaxAudioCiphertextSize(size_t plaintextSize) const {
 }
 
 size_t BlockXorCryptor::GetMaxVideoCiphertextSize(size_t plaintextSize) const {
-    // SEI-based: original data + SEI NAL per encrypted NAL
-    return plaintextSize + 32 * 50;
+    // SEI-based: original data + SEI NAL per encrypted NAL + emulation prevention (worst case ~1.5x)
+    return (plaintextSize * 2) + 32 * 50;
 }
 
 int BlockXorCryptor::TryFindAudioKey(
@@ -2933,14 +2942,20 @@ int BlockXorCryptor::TryFindVideoKey(
                     nalUnits[encryptedNalIdx + 1].start_offset : ciphertextSize;
     size_t nalContentSize = nalEnd - nal.start_offset - nal.header_size;
     
+    // First unescape the encrypted payload (remove emulation prevention bytes)
+    std::vector<uint8_t> unescaped(nalContentSize);
+    size_t unescapedSize = ReadWithEmulationPreventionRemoval(
+        ciphertext + nal.start_offset + nal.header_size, nalContentSize,
+        unescaped.data(), unescaped.size());
+    
     // Try each key
-    std::vector<uint8_t> decrypted(nalContentSize);
+    std::vector<uint8_t> decrypted(unescapedSize);
     for (size_t k = 0; k < keys.size(); k++) {
         _key = keys[k];
         while (_key.size() < 32) _key.push_back(0);
         
-        XorData(ciphertext + nal.start_offset + nal.header_size, decrypted.data(), nalContentSize);
-        uint32_t computed = ComputeChecksum(decrypted.data(), nalContentSize);
+        XorData(unescaped.data(), decrypted.data(), unescapedSize);
+        uint32_t computed = ComputeChecksum(decrypted.data(), unescapedSize);
         
         if (computed == seiInfo.checksum) {
             return static_cast<int>(k);
@@ -3030,16 +3045,22 @@ CryptResult BlockXorCryptor::DecryptVideo(
             continue;
         }
         
-        if (nal.should_encrypt && havePendingSei) {
+        if (nal.should_encrypt && havePendingSei && nalContentSize > 0) {
             // Copy NAL header
             if (outPos + nal.header_size > plaintextMaxSize) return CryptResult::Failed();
             memcpy(plaintext + outPos, ciphertext + nal.start_offset, nal.header_size);
             outPos += nal.header_size;
             
-            // XOR decrypt payload
-            if (outPos + nalContentSize > plaintextMaxSize) return CryptResult::Failed();
-            XorData(ciphertext + nal.start_offset + nal.header_size, plaintext + outPos, nalContentSize);
-            outPos += nalContentSize;
+            // First remove emulation prevention bytes from encrypted payload
+            std::vector<uint8_t> unescaped(nalContentSize);
+            size_t unescapedSize = ReadWithEmulationPreventionRemoval(
+                ciphertext + nal.start_offset + nal.header_size, nalContentSize,
+                unescaped.data(), unescaped.size());
+            
+            // XOR decrypt the unescaped payload
+            if (outPos + unescapedSize > plaintextMaxSize) return CryptResult::Failed();
+            XorData(unescaped.data(), plaintext + outPos, unescapedSize);
+            outPos += unescapedSize;
             
             havePendingSei = false;
         } else {
