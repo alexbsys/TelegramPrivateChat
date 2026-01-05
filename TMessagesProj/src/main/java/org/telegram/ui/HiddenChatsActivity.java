@@ -658,7 +658,8 @@ public class HiddenChatsActivity extends BaseFragment {
         String[] items = new String[]{
             LocaleController.getString("AskPasswordDisabled", R.string.AskPasswordDisabled),
             LocaleController.getString("AskPasswordAlways", R.string.AskPasswordAlways),
-            LocaleController.getString("AskPasswordIfEncrypted", R.string.AskPasswordIfEncrypted)
+            LocaleController.getString("AskPasswordIfEncrypted", R.string.AskPasswordIfEncrypted),
+            LocaleController.getString("AskPasswordBlockApp", R.string.AskPasswordBlockApp)
         };
         
         int currentMode = HiddenChatsManager.getInstance().getAskPasswordOnStartMode();
@@ -1049,6 +1050,9 @@ public class HiddenChatsActivity extends BaseFragment {
                                 break;
                             case HiddenChatsManager.ASK_PASSWORD_IF_ENCRYPTED_CHATS:
                                 status = LocaleController.getString("AskPasswordIfEncryptedShort", R.string.AskPasswordIfEncryptedShort);
+                                break;
+                            case HiddenChatsManager.ASK_PASSWORD_BLOCK_APP:
+                                status = LocaleController.getString("AskPasswordBlockApp", R.string.AskPasswordBlockApp);
                                 break;
                             default:
                                 status = LocaleController.getString("AskPasswordDisabled", R.string.AskPasswordDisabled);

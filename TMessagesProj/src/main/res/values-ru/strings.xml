@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="AppName">CryptoGram</string>
-    <string name="AppNameBeta">CryptoGram Beta</string>
+    <string name="AppName">CipherGram</string>
+    <string name="AppNameBeta">CipherGram Beta</string>
     <string name="LanguageName">Русский</string>
     <string name="English">Английский</string>
     <string name="LanguageNameInEnglish">Russian</string>
@@ -269,8 +269,8 @@
     <string name="HiddenChats">Скрытые чаты</string>
     <string name="SetupHiddenChatsPassword">Установка пароля скрытых чатов</string>
     <string name="EnterHiddenChatsPassword">Введите пароль скрытых чатов</string>
-    <string name="EnterProtectedZonePassword">Введите пароль Protected Zone</string>
-    <string name="SetupProtectedZonePassword">Установка пароля Protected Zone</string>
+    <string name="EnterProtectedZonePassword">Введите пароль Защищённой зоны</string>
+    <string name="SetupProtectedZonePassword">Установка пароля Защищённой зоны</string>
     <string name="HideChat">Скрыть чат</string>
     <string name="UnhideChat">Показать чат</string>
     <string name="SecurityPassword">Пароль-обманка</string>
@@ -337,6 +337,7 @@
     <string name="AskPasswordDisabled">Отключено</string>
     <string name="AskPasswordAlways">Всегда</string>
     <string name="AskPasswordIfEncrypted">Если есть шифр. чаты</string>
+    <string name="AskPasswordBlockApp">Блокировать приложение без пароля</string>
     <string name="AskPasswordIfEncryptedShort">Если есть шифр.</string>
     <string name="DuplicateDetection">Обнаружение дубликатов</string>
     <string name="DuplicateDetectionInfo">Количество сообщений для проверки на дубликаты. 0 - отключено. Обнаруживает пересылку ваших зашифрованных сообщений.</string>
@@ -360,8 +361,8 @@
     <string name="IncomingDecrypted">Входящие: Расшифрованы</string>
     <string name="IncomingDecryptionFailed">Входящие: Нет подходящего ключа</string>
     <string name="IncomingUnencrypted">Входящие: Не зашифрованы</string>
-    <string name="NeedProtectedZonePassword">Вам нужно сначала установить пароль Protected Zone. Перейдите в Дополнительную безопасность в меню.</string>
-    <string name="ProtectedZonePasswordNeeded">Для доступа к сохранённым ключам шифрования требуется пароль Protected Zone. Введите его или пропустите, чтобы ввести пароль звонка напрямую.</string>
+    <string name="NeedProtectedZonePassword">Вам нужно сначала установить пароль Защищённой зоны. Перейдите в Дополнительную безопасность в меню.</string>
+    <string name="ProtectedZonePasswordNeeded">Для доступа к сохранённым ключам шифрования требуется пароль Защищённой зоны. Введите его или пропустите, чтобы ввести пароль звонка напрямую.</string>
     <string name="DecryptionSuccessful">Расшифровка успешна!</string>
     <string name="BatteryOptimizationTitle">Обнаружена оптимизация батареи</string>
     <string name="BatteryOptimizationMessage">На вашем телефоне включена оптимизация батареи для CipherGram. Это может мешать получению входящих звонков и сообщений когда приложение свёрнуто.\n\nДля надёжного получения звонков и уведомлений отключите оптимизацию батареи для этого приложения.</string>
@@ -371,6 +372,7 @@
     <string name="BatteryOptimizationInstructionsText">1. Откройте Настройки телефона\n\n2. Перейдите в \"Приложения\"\n\n3. Найдите \"CipherGram\" и нажмите на него\n\n4. Перейдите в настройки \"Батарея\"\n\n5. Выберите \"Без ограничений\" или \"Не оптимизировать\"\n\nПримечание: Некоторые производители (Xiaomi, Huawei, Samsung) имеют дополнительные функции энергосбережения, которые нужно отключать отдельно в их настройках батареи или управления питанием.</string>
     <string name="OpenSettings">Открыть настройки</string>
     <string name="Later">Позже</string>
+    <string name="Exit">Выход</string>
     <string name="ProtectedZonePassword">Пароль Защищённой зоны</string>
     <string name="EnterProtectedZonePasswordFirst">Введите пароль Защищённой зоны для доступа к настройкам шифрования сообщений.</string>
     <string name="ProtectedZonePasswordRequired">Требуется пароль Защищённой зоны</string>

@@ -566,7 +566,7 @@ public class CallSettingsManager {
     }
     
     // Message prefix for sharing settings (emoji header + base64 encoded JSON)
-    public static final String SETTINGS_PREFIX = "📞🔧 CryptoGram Call Settings\n";
+    public static final String SETTINGS_PREFIX = "📞🔧 CipherGram Call Settings\n";
     public static final String SETTINGS_DATA_PREFIX = "DATA:";
     
     /**
@@ -604,7 +604,7 @@ public class CallSettingsManager {
      */
     public static boolean isCallSettingsMessage(String text) {
         if (text == null) return false;
-        return text.contains(SETTINGS_DATA_PREFIX) && text.contains("CryptoGram Call Settings");
+        return text.contains(SETTINGS_DATA_PREFIX) && (text.contains("CipherGram Call Settings") || text.contains("CryptoGram Call Settings"));
     }
     
     /**

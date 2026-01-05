@@ -88,6 +88,7 @@ public class HiddenChatsManager {
     public static final int ASK_PASSWORD_DISABLED = 0;
     public static final int ASK_PASSWORD_ALWAYS = 1;
     public static final int ASK_PASSWORD_IF_ENCRYPTED_CHATS = 2;
+    public static final int ASK_PASSWORD_BLOCK_APP = 3; // Require password before showing anything, exit if not entered
     
     // Flag to auto-hide next created secret chat
     private boolean hideNextSecretChat = false;
@@ -1034,12 +1035,19 @@ public class HiddenChatsManager {
         int mode = getAskPasswordOnStartMode();
         if (mode == ASK_PASSWORD_DISABLED) {
             return false;
-        } else if (mode == ASK_PASSWORD_ALWAYS) {
+        } else if (mode == ASK_PASSWORD_ALWAYS || mode == ASK_PASSWORD_BLOCK_APP) {
             return true;
         } else if (mode == ASK_PASSWORD_IF_ENCRYPTED_CHATS) {
             return hasEncryptedChats();
         }
         return false;
+    }
+    
+    /**
+     * Check if app should be blocked (exit) if password not entered
+     */
+    public boolean shouldBlockAppWithoutPassword() {
+        return getAskPasswordOnStartMode() == ASK_PASSWORD_BLOCK_APP;
     }
     
     /**

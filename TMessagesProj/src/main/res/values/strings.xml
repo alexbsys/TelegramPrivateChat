@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="AppName">CryptoGram</string>
-    <string name="AppNameBeta">CryptoGram Beta</string>
+    <string name="AppName">CipherGram</string>
+    <string name="AppNameBeta">CipherGram Beta</string>
     <string name="LanguageName">English</string>
     <string name="English">English</string>
     <string name="LanguageNameInEnglish">English</string>
@@ -3633,6 +3633,7 @@
     <string name="Open">Open</string>
     <string name="Save">Save</string>
     <string name="Cancel">Cancel</string>
+    <string name="Exit">Exit</string>
     <string name="Reduce">Reduce</string>
     <string name="Close">Close</string>
     <string name="Change">Change</string>
@@ -10266,6 +10267,7 @@
     <string name="AskPasswordDisabled">Disabled</string>
     <string name="AskPasswordAlways">Always</string>
     <string name="AskPasswordIfEncrypted">If encrypted chats exist</string>
+    <string name="AskPasswordBlockApp">Block app without password</string>
     <string name="AskPasswordIfEncryptedShort">If encrypted</string>
     <string name="DuplicateDetection">Duplicate message detection</string>
     <string name="DuplicateDetectionInfo">Number of recent messages to check for duplicates. Set to 0 to disable. Detects when someone resends your encrypted message.</string>

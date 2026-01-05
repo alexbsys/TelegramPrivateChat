@@ -7389,10 +7389,33 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
         }
     }
     
+    private void checkProtectedZonePasswordOnResume() {
+        HiddenChatsManager hiddenManager = HiddenChatsManager.getInstance();
+        EncryptedMessagesManager encManager = EncryptedMessagesManager.getInstance();
+        
+        // Only check if:
+        // 1. "Forget password on minimize" is enabled
+        // 2. Mode is "Block app without password"
+        // 3. Password is not cached (was forgotten when minimized)
+        // 4. User has a non-default password set
+        if (hiddenManager.isForgetPasswordOnMinimize() && 
+            hiddenManager.shouldBlockAppWithoutPassword() &&
+            !encManager.isPasswordCached() &&
+            hiddenManager.hasPassword() &&
+            !hiddenManager.isUsingDefaultPassword()) {
+            
+            FileLog.d("LaunchActivity: Password forgotten after minimize in block mode, showing password dialog");
+            showProtectedZonePasswordOnStartDialog();
+        }
+    }
+    
     private void showProtectedZonePasswordOnStartDialog() {
         if (this.isFinishing()) {
             return;
         }
+        
+        HiddenChatsManager hiddenManager = HiddenChatsManager.getInstance();
+        boolean shouldBlockApp = hiddenManager.shouldBlockAppWithoutPassword();
         
         AlertDialog.Builder builder = new AlertDialog.Builder(this);
         builder.setTitle("🔑 " + LocaleController.getString("EnterProtectedZonePassword", R.string.EnterProtectedZonePassword));
@@ -7420,12 +7443,32 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
             if (HiddenChatsManager.getInstance().checkPasswordWithDecoy(password)) {
                 // Load encrypted messages manager with password
                 EncryptedMessagesManager.getInstance().loadWithPassword(password);
+            } else if (shouldBlockApp) {
+                // Wrong password in block mode - show dialog again
+                AndroidUtilities.runOnUIThread(() -> showProtectedZonePasswordOnStartDialog(), 100);
             }
         });
         
-        builder.setNegativeButton(LocaleController.getString("Cancel", R.string.Cancel), null);
+        if (shouldBlockApp) {
+            // In block mode, exit app if user cancels
+            builder.setNegativeButton(LocaleController.getString("Exit", R.string.Exit), (dialog, which) -> {
+                finish();
+            });
+        } else {
+            builder.setNegativeButton(LocaleController.getString("Cancel", R.string.Cancel), null);
+        }
         
-        AlertDialog dialog = builder.show();
+        AlertDialog dialog = builder.create();
+        dialog.setCancelable(!shouldBlockApp); // Not cancelable in block mode
+        dialog.setCanceledOnTouchOutside(!shouldBlockApp);
+        dialog.show();
+        
+        if (shouldBlockApp) {
+            // Handle back press in block mode
+            dialog.setOnCancelListener(d -> {
+                finish();
+            });
+        }
         
         // Focus on password field
         passwordInput.requestFocus();
@@ -7571,6 +7614,10 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
         
         // If user was in a hidden chat, close it and go to main dialogs list
         closeHiddenChatIfOpen();
+        
+        // Check if we need to ask for Protected Zone password after resume 
+        // (e.g., when "forget password on minimize" is enabled with "block app" mode)
+        checkProtectedZonePasswordOnResume();
         
         pipActivityHandler.onResume();
         if (onResumeStaticCallback != null) {

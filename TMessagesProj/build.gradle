@@ -7,6 +7,58 @@ repositories {
     google()
 }
 
+// Helper function to get Firebase API key from properties file or environment
+def getFirebaseApiKey() {
+    // First try environment variable
+    def envValue = System.getenv("FIREBASE_API_KEY")
+    if (envValue != null && !envValue.isEmpty()) {
+        return envValue
+    }
+    // Then try api_keys.properties
+    def propsFile = rootProject.file("api_keys.properties")
+    if (propsFile.exists()) {
+        def props = new Properties()
+        props.load(new FileInputStream(propsFile))
+        def propValue = props.getProperty("FIREBASE_API_KEY")
+        if (propValue != null && !propValue.isEmpty()) {
+            return propValue
+        }
+    }
+    // Return empty placeholder if not found (will cause Firebase to fail, but build will complete)
+    return "YOUR_FIREBASE_API_KEY_HERE"
+}
+
+// Task to generate google-services.json from template
+task generateGoogleServicesJson {
+    def templateFile = file("google-services.json.template")
+    def outputFile = file("google-services.json")
+    
+    inputs.file(templateFile)
+    outputs.file(outputFile)
+    
+    doLast {
+        if (templateFile.exists()) {
+            def firebaseApiKey = getFirebaseApiKey()
+            def template = templateFile.text
+            def result = template.replace('${FIREBASE_API_KEY}', firebaseApiKey)
+            outputFile.text = result
+            println "Generated google-services.json with Firebase API key"
+        } else {
+            println "Warning: google-services.json.template not found"
+        }
+    }
+}
+
+// Ensure google-services.json is generated before preBuild and processGoogleServices
+preBuild.dependsOn generateGoogleServicesJson
+
+// Add dependency for all processGoogleServices tasks
+afterEvaluate {
+    tasks.matching { it.name.startsWith('process') && it.name.endsWith('GoogleServices') }.configureEach {
+        dependsOn generateGoogleServicesJson
+    }
+}
+
 configurations {
     compile.exclude module: 'support-v4'
 }
